@@ -488,7 +488,7 @@ const TOWER_TYPES = {
   tesla:   {name:'Tesla',  icon:'⚡', color:'purple', cost:110, dmg:20, rate:1.5,  range:150, crit:.04, critMult:2.0, chain:3, chainR:110, hp:120, desc:'Chain lightning — arcs between enemies.'},
   bomb:    {name:'Demolition',icon:'🧨',color:'orange',cost:130,dmg:0,  rate:0.0333,range:175,crit:0, critMult:1, hp:100, pspeed:470, bombDmg:800, bombR:118, fuse:5, bossUnlock:true, desc:'Lobs a lit dynamite — massive blast after 5s. 30s cd. Unlocks after your 1st boss.'},
   psyche:  {name:'Psyche', icon:'🔮', color:'mag',    cost:90,  dmg:0,  rate:0.1,  range:135, crit:0,  critMult:1, hp:80,  hold:3,  bossCost:1, bossUnlock:true, explosionImmune:true, desc:'Telekinetic hold — freezes enemies 3s (bosses resist 10s). Can\'t be destroyed by blasts (can still be frozen). Costs 💠 boss credits.'},
-  laser:   {name:'Laser', icon:'🔴',  color:'red',    cost:130, dmg:11, rate:2.2,  range:9999,crit:.03,critMult:2.0, hp:110, beamW:8, laser:true, bossCost:2, bossUnlock:true, desc:'Screen-wide beam — hits EVERYTHING in its path. Starts a fast weak baby; leveling makes it slower but a devastating wide beam. Costs 💠 boss credits.'},
+  laser:   {name:'Laser', icon:'🔴',  color:'red',    cost:130, dmg:11, rate:2.2,  range:9999,crit:.03,critMult:2.0, hp:110, beamW:8, laser:true, bossCost:1, bossUnlock:true, desc:'Screen-wide beam — hits EVERYTHING in its path. Starts a fast weak baby; leveling makes it slower but a devastating wide beam. Costs 💠 boss credits.'},
 };
 const PHANTOM_DMG = 120;   // a Phantom blast deals EXACTLY this to every tower it touches
 // Tower HP is tuned so "Phantom hits to kill" == tower LEVEL (+ a tough bonus for tanky types like Cannon).
@@ -1273,13 +1273,18 @@ function drawTowerBody(type,sz,c,ang){
     ctx.strokeStyle='#eafcff'; ctx.lineWidth=1.2; ctx.beginPath(); ctx.moveTo(0,-sz*0.62); ctx.lineTo(0,sz*0.34); ctx.moveTo(-sz*0.34,-sz*0.08); ctx.lineTo(sz*0.34,-sz*0.08); ctx.stroke();
     ctx.fillStyle='#fff'; ctx.globalAlpha=.7; ctx.beginPath(); ctx.arc(-sz*0.1,-sz*0.2,sz*0.06,0,6.283); ctx.fill(); ctx.globalAlpha=1; return;
   }
-  if(type==='poison'){            // bubbling toxin flask + spray nozzle
-    ctx.fillStyle='#141126'; ctx.beginPath(); ctx.arc(0,sz*0.06,sz*0.5,0,6.283); ctx.fill(); ctx.strokeStyle=c; ctx.lineWidth=2.5; ctx.stroke();
-    ctx.save(); ctx.beginPath(); ctx.arc(0,sz*0.06,sz*0.44,0,6.283); ctx.clip();
-    ctx.fillStyle=c; ctx.globalAlpha=.55; ctx.fillRect(-sz*0.5,sz*0.06-Math.sin(T*2)*sz*0.03,sz,sz); ctx.restore(); ctx.globalAlpha=1;
-    ctx.save(); ctx.rotate(ang); ctx.fillStyle=c; rr(sz*0.2,-sz*0.09,sz*0.55,sz*0.18,sz*0.05); ctx.fill();
-    ctx.fillStyle='#0d0b1a'; ctx.beginPath(); ctx.arc(sz*0.68,0,sz*0.06,0,6.283); ctx.fill(); ctx.restore();
-    for(let k=0;k<3;k++){ const bt=(T*0.8+k*0.4)%1; ctx.fillStyle='#eaffe0'; ctx.globalAlpha=(1-bt)*0.7; ctx.beginPath(); ctx.arc((k-1)*sz*0.16,sz*0.24-bt*sz*0.4,sz*0.05*(1-bt*0.5),0,6.283); ctx.fill(); } ctx.globalAlpha=1; return;
+  if(type==='poison'){            // glowing venom skull
+    ctx.save(); ctx.shadowBlur=13; ctx.shadowColor=c; ctx.fillStyle=c;
+    ctx.beginPath(); ctx.arc(0,-sz*0.06,sz*0.44,0,6.283); ctx.fill();          // cranium
+    rr(-sz*0.28,sz*0.16,sz*0.56,sz*0.3,sz*0.12); ctx.fill();                    // jaw
+    ctx.shadowBlur=0;
+    ctx.fillStyle='#0d0b1a'; ctx.beginPath(); ctx.arc(-sz*0.19,-sz*0.06,sz*0.16,0,6.283); ctx.arc(sz*0.19,-sz*0.06,sz*0.16,0,6.283); ctx.fill();   // eye sockets
+    ctx.fillStyle=c; ctx.shadowBlur=9; ctx.shadowColor=c; ctx.beginPath(); ctx.arc(-sz*0.19,-sz*0.04,sz*0.06,0,6.283); ctx.arc(sz*0.19,-sz*0.04,sz*0.06,0,6.283); ctx.fill(); ctx.shadowBlur=0;   // eye glow
+    ctx.fillStyle='#0d0b1a'; ctx.beginPath(); ctx.moveTo(0,sz*0.02); ctx.lineTo(-sz*0.07,sz*0.16); ctx.lineTo(sz*0.07,sz*0.16); ctx.closePath(); ctx.fill();   // nose
+    ctx.strokeStyle='#0d0b1a'; ctx.lineWidth=Math.max(1.2,sz*0.045); ctx.beginPath();   // teeth
+    ctx.moveTo(-sz*0.28,sz*0.28); ctx.lineTo(sz*0.28,sz*0.28);
+    for(let i=-2;i<=2;i++){ ctx.moveTo(i*sz*0.11,sz*0.18); ctx.lineTo(i*sz*0.11,sz*0.44); } ctx.stroke();
+    ctx.restore(); return;
   }
   if(type==='tesla'){             // coil tower — stacked rings + a crackling orb
     ctx.fillStyle='#141126'; rr(-sz*0.34,sz*0.18,sz*0.68,sz*0.34,4); ctx.fill(); ctx.strokeStyle=c; ctx.lineWidth=2; ctx.stroke();
@@ -1291,13 +1296,16 @@ function drawTowerBody(type,sz,c,ang){
     for(let k=0;k<2;k++){ const a=T*8+k*3; ctx.beginPath(); ctx.moveTo(0,-sz*0.46); ctx.lineTo(Math.cos(a)*sz*0.3,-sz*0.46+Math.sin(a)*sz*0.3); ctx.stroke(); } ctx.globalAlpha=1;
     ctx.fillStyle='#fff'; ctx.globalAlpha=.7; ctx.beginPath(); ctx.arc(-sz*0.06,-sz*0.52,sz*0.06,0,6.283); ctx.fill(); ctx.globalAlpha=1; return;
   }
-  if(type==='bomb'){              // stubby mortar launcher, dynamite loaded
-    ctx.fillStyle='#141126'; ctx.beginPath(); ctx.arc(0,sz*0.16,sz*0.5,0,6.283); ctx.fill(); ctx.strokeStyle=c; ctx.lineWidth=2; ctx.stroke();
-    ctx.save(); ctx.rotate(ang-Math.PI/4);
-    ctx.fillStyle=c; rr(-sz*0.15,-sz*0.55,sz*0.3,sz*0.62,sz*0.08); ctx.fill();
-    ctx.fillStyle='#0d0b1a'; ctx.beginPath(); ctx.arc(0,-sz*0.5,sz*0.13,0,6.283); ctx.fill();
-    ctx.fillStyle='#ff5a3a'; ctx.beginPath(); ctx.arc(0,-sz*0.52,sz*0.09,0,6.283); ctx.fill(); ctx.restore();
-    ctx.fillStyle=c; ctx.beginPath(); ctx.arc(0,sz*0.16,sz*0.16,0,6.283); ctx.fill(); return;
+  if(type==='bomb'){              // bundle of red dynamite sticks with a sparking fuse
+    ctx.fillStyle='#141126'; rr(-sz*0.5,sz*0.3,sz,sz*0.24,4); ctx.fill(); ctx.strokeStyle=c; ctx.lineWidth=2; ctx.stroke();   // base
+    const stW=sz*0.24, stH=sz*0.72;
+    for(let i=-1;i<=1;i++){ const x=i*sz*0.28;
+      ctx.fillStyle=i===0?'#ff5a3a':'#c0392b'; rr(x-stW/2,-sz*0.42,stW,stH,sz*0.05); ctx.fill();
+      ctx.fillStyle='#3a1410'; ctx.fillRect(x-stW/2,-sz*0.16,stW,sz*0.06); }               // stick bands
+    ctx.fillStyle='#7a5a2a'; ctx.fillRect(-sz*0.46,-sz*0.06,sz*0.92,sz*0.12);              // binding wrap
+    ctx.strokeStyle='#cabfae'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(sz*0.28,-sz*0.42); ctx.quadraticCurveTo(sz*0.5,-sz*0.58,sz*0.34,-sz*0.68); ctx.stroke();   // fuse
+    ctx.fillStyle='#ffe14d'; ctx.shadowBlur=12; ctx.shadowColor='#ffcf3a'; ctx.beginPath(); ctx.arc(sz*0.34,-sz*0.68,sz*0.09,0,6.283); ctx.fill(); ctx.shadowBlur=0;   // spark
+    return;
   }
   if(type==='psyche'){            // floating scrying orb on a tripod, motes orbiting
     ctx.fillStyle='#141126'; ctx.beginPath(); ctx.moveTo(-sz*0.36,sz*0.5); ctx.lineTo(sz*0.36,sz*0.5); ctx.lineTo(sz*0.16,sz*0.14); ctx.lineTo(-sz*0.16,sz*0.14); ctx.closePath(); ctx.fill(); ctx.strokeStyle=c; ctx.lineWidth=2; ctx.stroke();
@@ -1607,12 +1615,13 @@ function buildShop(){
     shop.innerHTML=visible.map(([k,t])=>`
       <div class="tw" data-k="${k}">
         <span class="hk" data-hk-for="${k}"></span>
-        <span class="ic" style="background:${col(t.color)}22;color:${col(t.color)};border:1px solid ${col(t.color)}">${t.icon}</span>
+        <canvas class="ic" width="40" height="40" data-ict="${k}" style="background:${col(t.color)}14;border:1px solid ${col(t.color)}55"></canvas>
         <span class="nm" style="color:${col(t.color)}">${t.name}</span>
         <span class="cost"${t.bossCost?' style="color:var(--mag)"':''}>${t.bossCost?'💠'+t.bossCost:'🪙'+t.cost}</span>
       </div>`).join('');
     shop.querySelectorAll('.tw').forEach(el=>{ el.onmouseenter=()=>hoverShopType=el.dataset.k;
       el.onmouseleave=()=>{ if(hoverShopType===el.dataset.k) hoverShopType=null; }; });
+    shop.querySelectorAll('canvas.ic').forEach(cv2=>drawTowerThumb(cv2, cv2.dataset.ict));   // same drawn art as the Tower Guide
   }
   shop.querySelectorAll('.tw').forEach(el=>{ const t=TOWER_TYPES[el.dataset.k];
     el.classList.toggle('dim', t.bossCost ? bossCoins<t.bossCost : coins<t.cost); });   // can't afford = dim (still hoverable to hotkey)
@@ -1977,8 +1986,8 @@ document.getElementById('guideOverlay').addEventListener('click',ev=>{ if(ev.tar
 // ---- Tower Guide — the reference for every tower (art + stats + description) ----
 function drawTowerThumb(cvEl,type){
   const g=cvEl.getContext('2d'), W2=cvEl.width, H2=cvEl.height; g.clearRect(0,0,W2,H2);
-  const c=col(TOWER_TYPES[type].color), sz=W2*0.32;
-  const prev=ctx; ctx=g; g.save(); g.translate(W2/2,H2/2+2); g.shadowBlur=8; g.shadowColor=c;
+  const c=col(TOWER_TYPES[type].color), sz=W2*0.36;
+  const prev=ctx; ctx=g; g.save(); g.translate(W2/2,H2/2+1); g.shadowBlur=8; g.shadowColor=c;
   try{ drawTowerBody(type, sz, c, -Math.PI/4); } finally { g.restore(); ctx=prev; }
 }
 function renderTowerGuide(){
