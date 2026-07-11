@@ -217,6 +217,9 @@
   @keyframes meteorpulse{0%,100%{box-shadow:0 0 16px rgba(255,122,58,.6)}50%{box-shadow:0 0 32px rgba(255,80,40,1),inset 0 0 14px rgba(255,180,58,.45)}}
   .meteor.cool{background:var(--panel);border-color:var(--line);color:var(--faint);box-shadow:none}
   .meteor.cool::before{content:'';display:inline-block;width:7px;height:7px;margin-right:6px;border-radius:50%;background:var(--faint);vertical-align:middle}
+  /* hotkey chip — attribute-based so it survives the className/textContent rewrites on these buttons */
+  button[data-key]::after{content:attr(data-key);margin-left:8px;padding:1px 6px;border:1px solid currentColor;border-radius:5px;
+    font-size:10px;font-weight:800;opacity:.6;vertical-align:middle}
   .scoreboard{margin:6px auto 0;border-collapse:collapse;font-size:13px;width:100%;max-width:560px}
   .scoreboard th{color:var(--muted);font-size:11px;letter-spacing:.5px;padding:4px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
   .scoreboard td{padding:3px 8px;text-align:center;font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -243,8 +246,8 @@
       <h2 id="selName">Tower</h2>
       <div class="sel-stats" id="selStats"></div>
       <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="btn up" id="upBtn">UPGRADE</button>
-        <button class="btn sell" id="sellBtn" style="width:44%">SELL</button>
+        <button class="btn up" id="upBtn" data-key="Q">UPGRADE</button>
+        <button class="btn sell" id="sellBtn" data-key="E" style="width:44%">SELL</button>
       </div>
     </div>
   </div>
@@ -274,12 +277,12 @@
         <button class="tbtn" data-m="strong">Str</button>
         <button class="tbtn" data-m="weak">Weak</button>
       </div>
-      <button class="haste" id="hasteBtn" title="+60% attack speed · recharges by kills">⚡ OVERDRIVE</button>
-      <button class="phantom" id="phantomBtn" title="All towers hunt only Phantoms for 10s · unlocks at boss 10" style="display:none">👻 PHANTOM HUNT</button>
-      <button class="reveal" id="revealBtn" title="Reveal the ghost routes for 10s · unlocks at boss 5" style="display:none">🗺 REVEAL PATH</button>
-      <button class="nuke" id="nukeBtn" title="Blow up the whole board · unlocks at boss 15" style="display:none">☢ NUKE</button>
-      <button class="stasis" id="stasisBtn" title="Freeze EVERY enemy for 4s · unlocks at boss 20" style="display:none">⏳ STASIS</button>
-      <button class="meteor" id="meteorBtn" title="Rain meteors for 8s · unlocks at boss 25" style="display:none">☄ METEOR STORM</button>
+      <button class="haste" id="hasteBtn" data-key="Z" title="+60% attack speed · recharges by kills · [Z]">⚡ OVERDRIVE</button>
+      <button class="phantom" id="phantomBtn" data-key="X" title="All towers hunt only Phantoms for 10s · unlocks at boss 10 · [X]" style="display:none">👻 PHANTOM HUNT</button>
+      <button class="reveal" id="revealBtn" data-key="C" title="Reveal the ghost routes for 10s · unlocks at boss 5 · [C]" style="display:none">🗺 REVEAL PATH</button>
+      <button class="nuke" id="nukeBtn" data-key="V" title="Blow up the whole board · unlocks at boss 15 · [V]" style="display:none">☢ NUKE</button>
+      <button class="stasis" id="stasisBtn" data-key="B" title="Freeze EVERY enemy for 4s · unlocks at boss 20 · [B]" style="display:none">⏳ STASIS</button>
+      <button class="meteor" id="meteorBtn" data-key="N" title="Rain meteors for 8s · unlocks at boss 25 · [N]" style="display:none">☄ METEOR STORM</button>
     </div>
   </div>
   <div class="panel">
@@ -1061,6 +1064,75 @@ function guyDemon(S){
   ctx.beginPath(); ctx.moveTo(-S*0.2,S*0.14); ctx.lineTo(-S*0.12,S*0.34); ctx.lineTo(-S*0.04,S*0.14); ctx.closePath();
   ctx.moveTo(S*0.2,S*0.14); ctx.lineTo(S*0.12,S*0.34); ctx.lineTo(S*0.04,S*0.14); ctx.closePath(); ctx.fill();
 }
+// Each tower is drawn as its OWN little emplacement (centered at 0,0), tinted its theme colour `c`,
+// scaling with `sz`, with the barrel/nozzle rotating toward the target angle `ang`.
+function drawTowerBody(type,sz,c,ang){
+  const T=now();
+  if(type==='cannon'){            // squat mortar — round bunker + thick swinging barrel
+    ctx.fillStyle='#141126'; ctx.beginPath(); ctx.arc(0,0,sz*0.54,0,6.283); ctx.fill();
+    ctx.strokeStyle=c; ctx.lineWidth=2.5; ctx.stroke();
+    ctx.save(); ctx.rotate(ang);
+    ctx.fillStyle=c; rr(-sz*0.12,-sz*0.2,sz*0.92,sz*0.4,sz*0.1); ctx.fill();
+    ctx.fillStyle='#0d0b1a'; ctx.beginPath(); ctx.arc(sz*0.8,0,sz*0.15,0,6.283); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle=c; ctx.beginPath(); ctx.arc(0,0,sz*0.22,0,6.283); ctx.fill();
+    ctx.fillStyle='#fff'; ctx.globalAlpha=.5; ctx.beginPath(); ctx.arc(-sz*0.06,-sz*0.06,sz*0.09,0,6.283); ctx.fill(); ctx.globalAlpha=1; return;
+  }
+  if(type==='gatling'){           // turret with three spinning barrels
+    ctx.fillStyle='#141126'; ctx.beginPath(); ctx.arc(0,0,sz*0.5,0,6.283); ctx.fill(); ctx.strokeStyle=c; ctx.lineWidth=2; ctx.stroke();
+    ctx.save(); ctx.rotate(ang); ctx.fillStyle=c;
+    for(let i=-1;i<=1;i++){ rr(sz*0.05,i*sz*0.17-sz*0.05,sz*0.8,sz*0.1,sz*0.04); ctx.fill(); }
+    ctx.fillStyle='#0d0b1a'; for(let i=-1;i<=1;i++){ ctx.beginPath(); ctx.arc(sz*0.82,i*sz*0.17,sz*0.05,0,6.283); ctx.fill(); }
+    ctx.restore();
+    ctx.fillStyle=c; ctx.beginPath(); ctx.arc(0,0,sz*0.2,0,6.283); ctx.fill();
+    ctx.fillStyle='#0d0b1a'; ctx.beginPath(); ctx.arc(0,0,sz*0.1,0,6.283); ctx.fill(); return;
+  }
+  if(type==='frost'){             // faceted ice crystal on a plinth, cold shards orbiting
+    ctx.fillStyle='#141126'; rr(-sz*0.42,sz*0.24,sz*0.84,sz*0.28,4); ctx.fill(); ctx.strokeStyle=c; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.save(); ctx.rotate(T*0.6); ctx.strokeStyle=c; ctx.globalAlpha=.4; ctx.lineWidth=1.5;
+    for(let k=0;k<6;k++){ const a=k*Math.PI/3; ctx.beginPath(); ctx.moveTo(Math.cos(a)*sz*0.52,Math.sin(a)*sz*0.52); ctx.lineTo(Math.cos(a)*sz*0.68,Math.sin(a)*sz*0.68); ctx.stroke(); }
+    ctx.restore(); ctx.globalAlpha=1;
+    ctx.fillStyle=c; ctx.globalAlpha=.82;
+    ctx.beginPath(); ctx.moveTo(0,-sz*0.62); ctx.lineTo(sz*0.34,-sz*0.08); ctx.lineTo(sz*0.2,sz*0.34); ctx.lineTo(-sz*0.2,sz*0.34); ctx.lineTo(-sz*0.34,-sz*0.08); ctx.closePath(); ctx.fill(); ctx.globalAlpha=1;
+    ctx.strokeStyle='#eafcff'; ctx.lineWidth=1.2; ctx.beginPath(); ctx.moveTo(0,-sz*0.62); ctx.lineTo(0,sz*0.34); ctx.moveTo(-sz*0.34,-sz*0.08); ctx.lineTo(sz*0.34,-sz*0.08); ctx.stroke();
+    ctx.fillStyle='#fff'; ctx.globalAlpha=.7; ctx.beginPath(); ctx.arc(-sz*0.1,-sz*0.2,sz*0.06,0,6.283); ctx.fill(); ctx.globalAlpha=1; return;
+  }
+  if(type==='poison'){            // bubbling toxin flask + spray nozzle
+    ctx.fillStyle='#141126'; ctx.beginPath(); ctx.arc(0,sz*0.06,sz*0.5,0,6.283); ctx.fill(); ctx.strokeStyle=c; ctx.lineWidth=2.5; ctx.stroke();
+    ctx.save(); ctx.beginPath(); ctx.arc(0,sz*0.06,sz*0.44,0,6.283); ctx.clip();
+    ctx.fillStyle=c; ctx.globalAlpha=.55; ctx.fillRect(-sz*0.5,sz*0.06-Math.sin(T*2)*sz*0.03,sz,sz); ctx.restore(); ctx.globalAlpha=1;
+    ctx.save(); ctx.rotate(ang); ctx.fillStyle=c; rr(sz*0.2,-sz*0.09,sz*0.55,sz*0.18,sz*0.05); ctx.fill();
+    ctx.fillStyle='#0d0b1a'; ctx.beginPath(); ctx.arc(sz*0.68,0,sz*0.06,0,6.283); ctx.fill(); ctx.restore();
+    for(let k=0;k<3;k++){ const bt=(T*0.8+k*0.4)%1; ctx.fillStyle='#eaffe0'; ctx.globalAlpha=(1-bt)*0.7; ctx.beginPath(); ctx.arc((k-1)*sz*0.16,sz*0.24-bt*sz*0.4,sz*0.05*(1-bt*0.5),0,6.283); ctx.fill(); } ctx.globalAlpha=1; return;
+  }
+  if(type==='tesla'){             // coil tower — stacked rings + a crackling orb
+    ctx.fillStyle='#141126'; rr(-sz*0.34,sz*0.18,sz*0.68,sz*0.34,4); ctx.fill(); ctx.strokeStyle=c; ctx.lineWidth=2; ctx.stroke();
+    ctx.strokeStyle=c; ctx.lineWidth=2;
+    for(let i=0;i<3;i++){ ctx.globalAlpha=.5+i*0.15; ctx.beginPath(); ctx.ellipse(0,sz*0.12-i*sz*0.16,sz*0.2-i*sz*0.03,sz*0.06,0,0,6.283); ctx.stroke(); }
+    ctx.globalAlpha=1;
+    ctx.fillStyle=c; ctx.shadowBlur=14; ctx.shadowColor=c; ctx.beginPath(); ctx.arc(0,-sz*0.46,sz*0.2,0,6.283); ctx.fill(); ctx.shadowBlur=0;
+    ctx.strokeStyle='#ead9ff'; ctx.lineWidth=1; ctx.globalAlpha=.8;
+    for(let k=0;k<2;k++){ const a=T*8+k*3; ctx.beginPath(); ctx.moveTo(0,-sz*0.46); ctx.lineTo(Math.cos(a)*sz*0.3,-sz*0.46+Math.sin(a)*sz*0.3); ctx.stroke(); } ctx.globalAlpha=1;
+    ctx.fillStyle='#fff'; ctx.globalAlpha=.7; ctx.beginPath(); ctx.arc(-sz*0.06,-sz*0.52,sz*0.06,0,6.283); ctx.fill(); ctx.globalAlpha=1; return;
+  }
+  if(type==='bomb'){              // stubby mortar launcher, dynamite loaded
+    ctx.fillStyle='#141126'; ctx.beginPath(); ctx.arc(0,sz*0.16,sz*0.5,0,6.283); ctx.fill(); ctx.strokeStyle=c; ctx.lineWidth=2; ctx.stroke();
+    ctx.save(); ctx.rotate(ang-Math.PI/4);
+    ctx.fillStyle=c; rr(-sz*0.15,-sz*0.55,sz*0.3,sz*0.62,sz*0.08); ctx.fill();
+    ctx.fillStyle='#0d0b1a'; ctx.beginPath(); ctx.arc(0,-sz*0.5,sz*0.13,0,6.283); ctx.fill();
+    ctx.fillStyle='#ff5a3a'; ctx.beginPath(); ctx.arc(0,-sz*0.52,sz*0.09,0,6.283); ctx.fill(); ctx.restore();
+    ctx.fillStyle=c; ctx.beginPath(); ctx.arc(0,sz*0.16,sz*0.16,0,6.283); ctx.fill(); return;
+  }
+  if(type==='psyche'){            // floating scrying orb on a tripod, motes orbiting
+    ctx.fillStyle='#141126'; ctx.beginPath(); ctx.moveTo(-sz*0.36,sz*0.5); ctx.lineTo(sz*0.36,sz*0.5); ctx.lineTo(sz*0.16,sz*0.14); ctx.lineTo(-sz*0.16,sz*0.14); ctx.closePath(); ctx.fill(); ctx.strokeStyle=c; ctx.lineWidth=2; ctx.stroke();
+    const bob=Math.sin(T*3)*sz*0.05;
+    ctx.fillStyle=c; for(let k=0;k<3;k++){ const a=T*2+k*2.1; ctx.globalAlpha=.7; ctx.beginPath(); ctx.arc(Math.cos(a)*sz*0.46,-sz*0.16+bob+Math.sin(a)*sz*0.16,sz*0.05,0,6.283); ctx.fill(); } ctx.globalAlpha=1;
+    ctx.fillStyle=c; ctx.globalAlpha=.4; ctx.beginPath(); ctx.arc(0,-sz*0.16+bob,sz*0.4,0,6.283); ctx.fill(); ctx.globalAlpha=1;
+    ctx.strokeStyle=c; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,-sz*0.16+bob,sz*0.4,0,6.283); ctx.stroke();
+    ctx.fillStyle='#fff'; ctx.globalAlpha=.6; ctx.beginPath(); ctx.arc(-sz*0.12,-sz*0.28+bob,sz*0.1,0,6.283); ctx.fill(); ctx.globalAlpha=1; return;
+  }
+  ctx.fillStyle=c; rr(-sz/2,-sz/2,sz,sz,sz*0.15); ctx.fill();
+}
 function drawTower(t){
   const b=TOWER_TYPES[t.type], c=col(b.color), sz=16+t.level*2.4;
   const jx=t.shakeT>0?rand(-3,3):0, jy=t.shakeT>0?rand(-3,3):0;   // crit / hit jolt — just this tower
@@ -1075,17 +1147,10 @@ function drawTower(t){
       ctx.restore(); } }
   ctx.save(); ctx.translate(t.x+jx,t.y+jy);
   ctx.shadowBlur=8+t.level*2; ctx.shadowColor=c;
-  // base
-  ctx.fillStyle='#1a1630'; ctx.fillRect(-sz/2-2,-sz/2-2,sz+4,sz+4);
-  ctx.fillStyle=c; ctx.globalAlpha=.22; ctx.fillRect(-sz/2,-sz/2,sz,sz); ctx.globalAlpha=1;
-  ctx.strokeStyle=c; ctx.lineWidth=2; ctx.strokeRect(-sz/2,-sz/2,sz,sz);
-  // level rings at high level
-  if(t.level>=4){ ctx.globalAlpha=.5; ctx.beginPath(); ctx.arc(0,0,sz*0.8,0,6.283); ctx.stroke(); ctx.globalAlpha=1; }
-  // turret
-  ctx.rotate(t.angle||0); ctx.fillStyle=c; ctx.shadowBlur=6;
-  const bl=sz*0.7+4;
-  ctx.fillRect(0,-3-t.level*0.3, bl, 6+t.level*0.6);
-  ctx.beginPath(); ctx.arc(0,0,sz*0.34,0,6.283); ctx.fillStyle='#fff'; ctx.globalAlpha=.85; ctx.fill(); ctx.globalAlpha=1;
+  drawTowerBody(t.type, sz, c, t.angle||0);
+  if(t.level>=4){ ctx.strokeStyle=c; ctx.lineWidth=2; ctx.globalAlpha=.4;   // upgrade ring at high level
+    ctx.beginPath(); ctx.arc(0,0,sz*0.95,0,6.283); ctx.stroke(); ctx.globalAlpha=1; }
+  ctx.shadowBlur=0;
   ctx.restore();
   // level stars
   ctx.fillStyle=col('gold'); ctx.font='9px monospace'; ctx.textAlign='center';
@@ -1552,8 +1617,8 @@ window.addEventListener('keydown',ev=>{
   if(paused) return;
   if(k>='1' && k<='9'){ const shop=document.getElementById('shop'); const btns=shop.querySelectorAll('.tw');
     const el=btns[+k-1]; if(el && !el.disabled){ el.click(); ev.preventDefault(); } return; }
-  if(k==='u'){ upgradeSelected(); ev.preventDefault(); return; }
-  if(k==='delete'||k==='backspace'){ sellSelected(); ev.preventDefault(); return; }
+  if(k==='q'){ upgradeSelected(); ev.preventDefault(); return; }
+  if(k==='e'||k==='delete'||k==='backspace'){ sellSelected(); ev.preventDefault(); return; }
   if(k==='z'){ fireHaste(); ev.preventDefault(); return; }
   if(k==='x'){ firePhantom(); ev.preventDefault(); return; }
   if(k==='c'){ fireReveal(); ev.preventDefault(); return; }
