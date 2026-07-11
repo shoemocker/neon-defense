@@ -169,6 +169,34 @@
   .bcard:not(.on) .bname{color:var(--faint)}
   .bdesc{font-size:11.5px;color:var(--muted);line-height:1.35;margin-top:4px;min-height:46px}
   .bclose{margin-top:14px;width:200px}
+  /* Tower Guide — icon on the left, name + price beside it, description below (wider 2-up cards) */
+  .tgwrap{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:8px;text-align:left}
+  @media(max-width:640px){.tgwrap{grid-template-columns:1fr}}
+  .tgcard{background:var(--panel2);border:2px solid var(--cyan);border-radius:12px;padding:12px 14px;box-shadow:0 0 14px rgba(51,230,255,.14)}
+  .tghead{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+  .tgthumb{width:56px;height:56px;flex:none;image-rendering:pixelated;background:rgba(0,0,0,.28);border-radius:10px}
+  .tgmeta{display:flex;flex-direction:column;gap:3px;min-width:0}
+  .tgcard .bname{font-weight:800;font-size:16px;letter-spacing:.5px;margin:0}
+  .tgcard .bcost{font-weight:700;font-size:13px}
+  .tgcard .bdesc{font-size:12.5px;color:var(--muted);line-height:1.45;margin:0;min-height:0;text-align:left}
+  /* version tag under SHOEMOCKER — same gradient theme as the h1, smaller */
+  .verline{text-align:center;margin:-6px 0 2px;font-size:11px;letter-spacing:2px;font-weight:800;font-family:"Courier New",monospace;
+    background:linear-gradient(90deg,var(--cyan),var(--mag));-webkit-background-clip:text;background-clip:text;color:transparent;opacity:.9;cursor:default}
+  /* patch-notes modal */
+  .modal.patch{border-color:var(--gold);box-shadow:0 0 50px rgba(255,207,58,.35);max-width:760px;width:92%;text-align:left}
+  .modal.patch h3{margin:0 0 2px;font-size:24px;letter-spacing:2px;color:var(--gold);text-align:center}
+  .modal.patch .gsub{color:var(--muted);font-size:13px;margin:0 0 12px;text-align:center}
+  .pnote{border-left:3px solid var(--line);padding:2px 0 12px 14px;margin:0 0 4px}
+  .pnote:first-of-type{border-left-color:var(--gold)}
+  .pnh{display:flex;align-items:baseline;gap:10px;margin-bottom:5px;flex-wrap:wrap}
+  .pnv{font-family:"Courier New",monospace;font-weight:900;font-size:16px;color:var(--gold);letter-spacing:1px}
+  .pnt{font-weight:800;font-size:14px;color:var(--ink);letter-spacing:.5px}
+  .pntag{font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:1px}
+  .pnote.cur .pnv{color:var(--cyan)} .pnote.cur{border-left-color:var(--cyan)}
+  .pnote ul{margin:0;padding-left:18px} .pnote li{font-size:12.5px;color:var(--muted);line-height:1.5;margin:2px 0}
+  /* TABLET input mode: no physical keys → hide every key badge + key-only hints */
+  body.tablet button[data-key]::after{display:none!important}
+  body.tablet .kbmonly{display:none!important}
   .strow{position:relative;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 10px;margin:5px 0;border-radius:7px;background:var(--panel2);font-size:14px;overflow:hidden}
   .strow .sbar{position:absolute;left:0;top:0;bottom:0;z-index:0;border-radius:7px}
   .strow .sname,.strow .sval{position:relative;z-index:1}
@@ -303,7 +331,7 @@
     <h1>NEON DEFENSE</h1>
     <div class="card shop-card">
       <h2>Towers — hover + press 1-5</h2>
-      <div class="hint" style="margin:-2px 0 8px"><b style="color:var(--ink)">Click a tower</b> then a tile to place it, or <b style="color:var(--ink)">click an empty tile</b> for the wheel. Hover + <b style="color:var(--cyan)">1-5</b> to hotkey. <b style="color:var(--cyan)">E</b> over a monster to <b style="color:var(--red)">lock-fire</b> it (E on empty = cancel). <b style="color:var(--cyan)">`</b> upgrades all lower same-type towers. <b style="color:var(--lime)">F</b> relocates a tower once, free. See the <b style="color:var(--purple)">🗼 Tower Guide</b> (H).</div>
+      <div class="hint" id="shopHint" style="margin:-2px 0 8px"></div>
       <div class="shop" id="shop"></div>
     </div>
     <div class="card" id="selCard" style="display:none">
@@ -311,8 +339,8 @@
       <div class="sel-stats" id="selStats"></div>
       <button class="btn up" id="upBtn" data-key="Q" style="margin-top:10px">UPGRADE</button>
       <div style="display:flex;gap:8px;margin-top:8px">
-        <button class="btn move" id="moveBtn" data-key="F" title="Relocate this tower ONCE for free — after that it's rooted for the game" style="width:56%">↪ MOVE</button>
-        <button class="btn sell" id="sellBtn" data-key="Del" style="width:44%">SELL</button>
+        <button class="btn move" id="moveBtn" data-key="G" title="Relocate this tower ONCE for free — after that it's rooted for the game" style="width:56%">↪ MOVE</button>
+        <button class="btn sell" id="sellBtn" data-key="F" style="width:44%">SELL</button>
       </div>
       <button class="btn upall" id="upAllBtn" data-key="&#96;" title="Upgrade every same-type tower at or below this level, up to this level +1">⏫ UPGRADE ALL</button>
     </div>
@@ -331,7 +359,9 @@
       <div class="stat lost" title="Towers destroyed by enemies">🏚 <span class="lbl">LOST</span> <b id="towersLost">0</b></div>
       <div class="stat lives" title="Lives remaining">❤️ <span class="lbl">LIVES</span> <b id="lives">0</b></div>
       <button class="stat guidebtn" id="towerGuideBtn" title="Tower Guide — [H]">🗼 <span class="lbl">TOWERS</span></button>
-      <button class="stat guidebtn" id="guideBtn" title="Monster Guide — [G]">👾 <span class="lbl">GUIDE</span></button>
+      <button class="stat guidebtn" id="guideBtn" title="Monster Guide — [M]">👾 <span class="lbl">GUIDE</span></button>
+      <button class="stat guidebtn" id="patchBtn" title="Patch notes — the whole build history">📓 <span class="lbl">PATCH</span></button>
+      <button class="stat guidebtn" id="modeBtn" title="Switch input mode — Keyboard &amp; Mouse ↔ Tablet">🖱 <span class="lbl" id="modeLbl">KB + MOUSE</span></button>
     </div>
     <div class="canvas-wrap">
       <canvas id="cv" width="1280" height="720"></canvas>
@@ -340,6 +370,7 @@
       <div class="overlay" id="overlay"><div id="overlayInner"></div></div>
       <div class="overlay" id="guideOverlay"><div class="modal guide" id="guideInner"></div></div>
       <div class="overlay" id="towerGuideOverlay"><div class="modal guide tower" id="towerGuideInner"></div></div>
+      <div class="overlay" id="patchOverlay"><div class="modal patch" id="patchInner"></div></div>
     </div>
     <div class="attackbar">
       <span class="ablabel">🎯 GLOBAL ATTACK MODE <span style="color:var(--faint);font-weight:400">(every tower on “Auto”)</span></span>
@@ -359,6 +390,7 @@
   </div>
   <div class="panel">
     <h1>SHOEMOCKER</h1>
+    <div class="verline" id="verLine" title="Version · build commit">v00.10 · <span id="buildSha">0735473</span></div>
     <button class="btn go" id="waveBtn">▶ START WAVE 1</button>
     <div class="card">
       <h2>Global Buffs — from bosses</h2>
@@ -582,8 +614,8 @@ const TOWER_TYPES = {
   frost:   {name:'Frost',  icon:'❄️', color:'ice',    cost:70,  dmg:6,  rate:1.6,  range:140, crit:.02, critMult:1.5, splash:0,  pspeed:700, hp:90,  slow:.45, slowT:1.8, desc:'Chills enemies — slows them way down.'},
   poison:  {name:'Venom',  icon:'☠️', color:'lime',   cost:75,  dmg:5,  rate:1.3,  range:145, crit:.02, critMult:1.5, splash:0,  pspeed:640, hp:90,  dot:16, dotT:3.2, desc:'Injects poison — damage over time, stacks.'},
   tesla:   {name:'Tesla',  icon:'⚡', color:'purple', cost:110, dmg:20, rate:1.5,  range:150, crit:.04, critMult:2.0, chain:3, chainR:110, hp:120, desc:'Chain lightning — arcs between enemies.'},
-  bomb:    {name:'Demolition',icon:'🧨',color:'orange',cost:130,dmg:0,  rate:0.0333,range:175,crit:0, critMult:1, hp:100, pspeed:470, bombDmg:800, bombR:118, fuse:5, bossUnlock:true, desc:'Lobs a lit dynamite — massive blast after 5s. 30s cd. Unlocks after your 1st boss.'},
-  psyche:  {name:'Psyche', icon:'🔮', color:'mag',    cost:90,  dmg:0,  rate:0.1,  range:135, crit:0,  critMult:1, hp:80,  hold:3,  bossCost:1, bossUnlock:true, explosionImmune:true, desc:'Telekinetic hold — freezes enemies 3s (bosses resist 10s). Can\'t be destroyed by blasts (can still be frozen). Costs 💠 boss credits.'},
+  bomb:    {name:'Demolition',icon:'🧨',color:'orange',cost:130,dmg:0,  rate:0.0333,range:175,crit:0, critMult:1, hp:100, pspeed:470, bombDmg:800, bombR:118, fuse:5, fire:55, fireT:2.0, bossUnlock:true, desc:'Lobs a lit dynamite — huge blast, then sets everything caught in it ABLAZE (fast, heavy burn). 30s cd. Unlocks after your 1st boss.'},
+  psyche:  {name:'Psyche', icon:'🔮', color:'mag',    cost:90,  dmg:0,  rate:0.1,  range:135, crit:0,  critMult:1, hp:80,  hold:3,  bossCost:1, bossUnlock:true, explosionImmune:true, desc:'Telekinetic hold — freezes enemies 3s (bosses resist 10s). Can\'t be destroyed by blasts. Costs 💠 boss credits.'},
   laser:   {name:'Laser', icon:'🔴',  color:'red',    cost:130, dmg:11, rate:2.2,  range:9999,crit:.03,critMult:2.0, hp:110, beamW:8, laser:true, bossCost:1, bossUnlock:true, explosionImmune:true, desc:'Screen-wide beam — hits EVERYTHING in its path. Starts a fast weak baby; leveling makes it slower but a devastating wide beam. Can\'t be destroyed by blasts. Costs 💠 boss credits.'},
 };
 const PHANTOM_DMG = 120;   // a Phantom blast deals EXACTLY this to every tower it touches
@@ -640,6 +672,8 @@ let gb, occupancy, build, selected, state, spawnQueue, spawnT, shake, hoverCell,
 let uiTimer=0;   // throttles the heavier shop/selected-card rebuild off the per-frame path
 let guideOpen=false;      // Bestiary overlay open?
 let towerGuideOpen=false; // Tower Guide overlay open?
+let patchOpen=false;      // Patch-notes overlay open?
+let inputMode=(()=>{ try{ return localStorage.getItem('neonInputMode')||'kbm'; }catch(_){ return 'kbm'; } })();  // 'kbm' | 'tablet'
 let discovered=(()=>{ try{ return new Set(JSON.parse(localStorage.getItem('neonDefenseBestiary')||'[]')); }catch(_){ return new Set(); } })();  // monsters ever killed (persists)
 let targetMode='close';   // close | far | strong | weak — the DEFAULT; a tower with its own .mode overrides it
 let hlTower=null;         // tower highlighted by hovering its DPS-panel row
@@ -729,6 +763,7 @@ function stats(t){
     critMult: b.critMult + gb.critDmg,
     splash: b.splash, chain:b.chain||0, chainR:b.chainR||0,
     slow:b.slow, slowT:b.slowT, dot:b.dot*(1+ .15*L), dotT:b.dotT, pspeed:b.pspeed,
+    fire:b.fire?b.fire*(1+.18*L):0, fireT:b.fireT||0,
     hold:b.hold, bombDmg:(b.bombDmg||0)*Math.pow(1.22,L), bombR:b.bombR||0,
   };
 }
@@ -795,7 +830,7 @@ function spawnEnemy(spec){
     reward:b.reward+Math.floor(wave*0.8), leak:b.leak, boss:!!b.boss, resist, color, dx:1, dy:0,
     exploder:!!b.exploder, froster:!!b.froster, jolt:!!b.jolt, hex:!!b.hex,
     explodeAt:(b.exploder||b.froster||b.jolt||b.hex)?rand(0.25,0.82):0, exploded:false,
-    slowUntil:0, slowMul:1, dot:0, dotUntil:0, flash:0, traveled:0, holdUntil:0, psycheImmuneUntil:0});
+    slowUntil:0, slowMul:1, dot:0, dotUntil:0, fire:0, fireUntil:0, flash:0, traveled:0, holdUntil:0, psycheImmuneUntil:0});
   if(spec.type==='boss') offerBossBuff();
 }
 
@@ -869,7 +904,7 @@ function fire(t){
 function rollDmg(s){ const crit=Math.random()<s.crit; let v=s.dmg*rand(.92,1.08); if(crit)v*=s.critMult; return {v,crit}; }
 function projImpact(p){
   if(p.type==='bomb'){   // dynamite lands and plants — 5s fuse, then a massive blast
-    bombs.push({x:p.x,y:p.y,fuse:TOWER_TYPES.bomb.fuse||5,dmg:p.s.bombDmg||300,R:p.s.bombR||115,owner:p.owner});
+    bombs.push({x:p.x,y:p.y,fuse:TOWER_TYPES.bomb.fuse||5,dmg:p.s.bombDmg||300,R:p.s.bombR||115,fire:p.s.fire||0,fireT:p.s.fireT||0,owner:p.owner});
     sfx('place'); return;
   }
   const s=p.s, b=TOWER_TYPES[p.type];
@@ -943,7 +978,7 @@ function towerSpecial(t){
     for(const e of near){ beams.push({x1:t.x,y1:t.y,x2:e.x,y2:e.y,life:.14,color:'purple'}); damage(e,dmg,false,t); if(L5)e.stunUntil=Math.max(e.stunUntil||0,now()+0.4); } sfx('zap'); }
   else if(t.type==='bomb'){ const n=L5?5:3, live=enemies.filter(e=>e.hp>0);
     for(let k=0;k<n;k++){ const e=live.length?live[Math.floor(rand(0,live.length))]:null; const tx=e?e.x:t.x+rand(-120,120), ty=e?e.y:t.y+rand(-120,120);
-      bombs.push({x:tx,y:ty,fuse:1.2,dmg:(s.bombDmg||300)*0.5*(L5?1.5:1),R:(s.bombR||110)*0.8,owner:t}); } sfx('place'); }
+      bombs.push({x:tx,y:ty,fuse:1.2,dmg:(s.bombDmg||300)*0.5*(L5?1.5:1),R:(s.bombR||110)*0.8,fire:(s.fire||0)*(L5?1.3:1),fireT:s.fireT||0,owner:t}); } sfx('place'); }
   else if(t.type==='psyche'){ const rad=R*(L5?1.3:1), dur=L5?3:2;
     for(const e of enemies){ if(e.hp>0 && dist(t.x,t.y,e.x,e.y)<=rad){ if(!(e.boss&&now()<(e.psycheImmuneUntil||0))){ e.holdUntil=now()+dur; if(e.boss)e.psycheImmuneUntil=e.holdUntil+10; if(L5)damage(e,(s.dmg*2)||40,false,t); } } } psychePulse(t); }
 }
@@ -1065,7 +1100,9 @@ function bombExplode(bm){ shake=Math.max(shake,16); sfx('boom'); explosion(bm.x,
   for(let i=0;i<40;i++){ const a=rand(0,6.283),sp=rand(60,bm.R*4);
     parts.push({x:bm.x,y:bm.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:rand(.3,.7),max:.7,c:i%2?'#ffcf3a':'#ff5a2a',sz:rand(2,6),g:40}); }
   for(const e of enemies){ if(e.hp<=0)continue; const d=dist(bm.x,bm.y,e.x,e.y); if(d<=bm.R){ const fall=1-0.35*(d/bm.R);
-    damage(e, bm.dmg*fall, false, {owner:bm.owner}); } } }
+    damage(e, bm.dmg*fall, false, {owner:bm.owner});
+    // caught in the blast → set ABLAZE: a fast, heavy burn-over-time (own slot, separate from Venom's poison)
+    if(bm.fire && e.hp>0){ e.fire=Math.max(e.fire||0, bm.fire); e.fireUntil=now()+(bm.fireT||2); e.fireOwner=bm.owner; } } } }
 
 // ---- Update ----
 function update(dt){
@@ -1084,6 +1121,8 @@ function update(dt){
     if(e.hp<=0)continue;
     if(e.flash>0)e.flash-=g;
     if(e.dotUntil>now() && e.dot>0){ const d=e.dot*g; if(e.dotOwner&&e.hp>0){ const rd=Math.min(d,e.hp); e.dotOwner.dmgTotal=(e.dotOwner.dmgTotal||0)+rd; e.dotOwner.dmgRound=(e.dotOwner.dmgRound||0)+rd; } e.hp-=d; if(Math.random()<g*8)parts.push({x:e.x+rand(-e.r,e.r),y:e.y+rand(-e.r,e.r),vx:0,vy:-30,life:.4,max:.4,c:col('lime'),sz:2,g:-10}); if(e.hp<=0){killEnemy(e,null);continue;} }
+    if(e.fireUntil>now() && e.fire>0){ const d=e.fire*g; if(e.fireOwner&&e.hp>0){ const rd=Math.min(d,e.hp); e.fireOwner.dmgTotal=(e.fireOwner.dmgTotal||0)+rd; e.fireOwner.dmgRound=(e.fireOwner.dmgRound||0)+rd; } e.hp-=d;
+      if(Math.random()<g*14)parts.push({x:e.x+rand(-e.r,e.r),y:e.y+rand(-e.r,e.r*0.3),vx:rand(-10,10),vy:rand(-46,-18),life:.5,max:.5,c:Math.random()<.5?'#ff7a3a':'#ffcf3a',sz:rand(2,4),g:-34}); if(e.hp<=0){killEnemy(e,null);continue;} }
     const lane=lanes[e.lane]||lanes[0];
     if(e.exploder && !e.exploded && e.traveled >= e.explodeAt*lane.len){ exploderExplode(e); e.exploded=true; }
     if(e.froster && !e.exploded && e.traveled >= e.explodeAt*lane.len){ frosterFreeze(e); e.exploded=true; }
@@ -1522,6 +1561,18 @@ function drawSpecialAura(e){
     ctx.beginPath(); ctx.arc(e.x,e.y,R+9+3*Math.sin(T*2),0,6.283); ctx.stroke(); ctx.restore();
   }
 }
+// on fire — flickering flame tongues around a burning enemy (set ablaze by a Demolition blast). Absolute coords
+// so it renders for EVERY enemy type (drawn behind the body so the flames appear to lick up around it).
+function drawFireAura(e){ if(!(e.fireUntil>now()))return; const T=now(), R=e.r;
+  ctx.save(); ctx.shadowBlur=14; ctx.shadowColor='#ff5a2a';
+  // faint ember glow so the whole minion reads as burning
+  ctx.globalAlpha=.28; ctx.fillStyle='#ff7a3a'; ctx.beginPath(); ctx.arc(e.x,e.y,R*1.15,0,6.283); ctx.fill();
+  ctx.globalAlpha=.95;
+  for(let f=0;f<7;f++){ const ang=-Math.PI/2+(f-3)*0.5, bx=e.x+Math.cos(ang)*R*0.85, by=e.y+Math.sin(ang)*R*0.55+R*0.2;
+    const h=R*(1.15+0.85*Math.abs(Math.sin(T*12+f*1.9)));
+    ctx.fillStyle=f%2?'#ff6a2a':'#ffd23a';
+    ctx.beginPath(); ctx.moveTo(bx-4,by); ctx.quadraticCurveTo(bx-1.4,by-h*0.55,bx,by-h); ctx.quadraticCurveTo(bx+1.4,by-h*0.55,bx+4,by); ctx.closePath(); ctx.fill(); }
+  ctx.globalAlpha=1; ctx.shadowBlur=0; ctx.restore(); }
 function drawEnemy(e){
   if(e.holdUntil>now()){ const t=now();   // telekinetic hold aura (behind any ghost type)
     ctx.save(); ctx.globalAlpha=0.5+0.3*Math.sin(t*8); ctx.strokeStyle='#d99bff'; ctx.lineWidth=2.5; ctx.shadowBlur=14; ctx.shadowColor='#c77dff';
@@ -1529,7 +1580,7 @@ function drawEnemy(e){
     for(let k=0;k<4;k++){ const a=t*3+k*1.5708; ctx.globalAlpha=0.75; ctx.fillStyle='#e6c3ff';
       ctx.beginPath(); ctx.arc(e.x+Math.cos(a)*(e.r+7),e.y+Math.sin(a)*(e.r+7),2,0,6.283); ctx.fill(); }
     ctx.restore(); }
-  if(!e.thumb) drawSpecialAura(e);   // cosmetic signature effect (skipped on Bestiary thumbnails)
+  if(!e.thumb){ drawSpecialAura(e); drawFireAura(e); }   // cosmetic auras (skipped on Bestiary thumbnails)
   if(e.exploder){ drawPhantom(e); return; }
   if(e.froster){ drawFroster(e); return; }
   if(e.jolt){ drawSpectre(e,'#c79bff','#5a1fd6','#3a0a6e','SURGE','⚡'); return; }
@@ -1756,6 +1807,8 @@ function renderSel(){
   if(s.chain)rows.push(['Chains',s.chain]);
   if(b.slow)rows.push(['Slow','×'+b.slow]);
   if(b.dot)rows.push(['Poison',s.dot.toFixed(0)+'/s']);
+  if(b.bombDmg)rows.push(['Blast',Math.round(s.bombDmg)]);
+  if(b.fire)rows.push(['🔥 Burn',s.fire.toFixed(0)+'/s · '+s.fireT.toFixed(1)+'s']);
   rows.push(['Dmg dealt', Math.round(t.dmgTotal||0).toLocaleString()]);
   if((t.combatTime||0)>0.3) rows.push(['DPS', (t.dmgTotal/t.combatTime).toFixed(1)]);
   const A=ABIL[t.type];   // signature ability line — locked <Lv3, active at Lv3, upgraded at Lv5 (laser has none)
@@ -1884,8 +1937,9 @@ cv.addEventListener('click',ev=>{ audioInit(); const p=cellFromEvent(ev); const 
     if(placeTower(build,p.c,p.r) && !(bt.bossCost ? bossCoins>=bt.bossCost : coins>=bt.cost)) build=null; return; }
   const t=occupancy[key];
   if(t){ selected=t; renderSel(); return; }                        // click a tower → select it
-  if(buildable(p.c,p.r) && !occupancy[key]){ openRadial(p.c,p.r); return; }   // click an empty buildable tile → open the wheel
-  selected=null; document.getElementById('selCard').style.display='none';    // clicked a road/edge → deselect
+  // TABLET: tap an empty tile → build wheel. KB+MOUSE: left-click building is OFF (use hotkeys / shop-arm), so deselect.
+  if(inputMode==='tablet' && buildable(p.c,p.r) && !occupancy[key]){ openRadial(p.c,p.r); return; }
+  selected=null; document.getElementById('selCard').style.display='none';    // empty/road/edge → deselect
 });
 cv.addEventListener('contextmenu',ev=>{ev.preventDefault(); cancelPlacement(); selected=null; refreshShopSel(); document.getElementById('selCard').style.display='none';});
 document.getElementById('waveBtn').onclick=()=>{ audioInit(); if(state==='idle'){ armed=true; if((wave+1)%5===0) startIntro(); else startWave(); } };
@@ -2052,8 +2106,10 @@ window.addEventListener('keydown',ev=>{
   if(ev.metaKey||ev.ctrlKey||ev.altKey) return;
   const tn=ev.target&&ev.target.tagName; if(tn==='INPUT'||tn==='TEXTAREA') return;   // don't hijack keys while typing (e.g. Spotify URL)
   const k=ev.key.toLowerCase();
+  if(k==='escape' && patchOpen){ togglePatch(); ev.preventDefault(); return; }   // patch notes closes even in tablet
+  if(inputMode==='tablet') return;   // TABLET mode has no keyboard shortcuts — everything is via taps
   if(k==='p'){ togglePause(); ev.preventDefault(); return; }
-  if(k==='g'){ toggleGuide(); ev.preventDefault(); return; }
+  if(k==='m'){ toggleGuide(); ev.preventDefault(); return; }        // M → Monster guide (G is now free-move)
   if(k==='h'){ toggleTowerGuide(); ev.preventDefault(); return; }
   if(paused) return;
   if(k>='1' && k<='5'){   // only 5 hotkeys for now
@@ -2063,8 +2119,8 @@ window.addEventListener('keydown',ev=>{
     ev.preventDefault(); return; }
   if(k==='q'){ upgradeSelected(); ev.preventDefault(); return; }
   if(k==='`'){ upgradeFleet(); ev.preventDefault(); return; }   // upgrade all same-type towers ≤ this level to par
-  if(k==='f'){ startMove(); ev.preventDefault(); return; }                        // F → free one-time relocate
-  if(k==='delete'||k==='backspace'){ sellSelected(); ev.preventDefault(); return; }
+  if(k==='g'){ startMove(); ev.preventDefault(); return; }                        // G → free one-time relocate
+  if(k==='f'||k==='delete'||k==='backspace'){ sellSelected(); ev.preventDefault(); return; }   // F → sell
   if(k==='e'){ if(!ev.repeat){ const e=enemyUnderCursor();   // E over a monster → LOCK all towers onto it; E on empty → cancel
       if(e){ focusEnemy=e; focusHeld=true; } else { focusHeld=false; focusEnemy=null; } } ev.preventDefault(); return; }
   if(k==='z'){ fireHaste(); ev.preventDefault(); return; }
@@ -2106,7 +2162,7 @@ function renderBestiary(){
       return `<div class="bcard ${r?'on':''}"><canvas class="bthumb" width="74" height="74" data-t="${t}"></canvas>`
         +`<div class="bname"${r?' style="color:'+col(m.color)+'"':''}>${r?m.name:'???'}</div>`
         +`<div class="bdesc">${r?BESTIARY_DESC[t]:'— defeat one to reveal —'}</div></div>`; }).join('')}</div>
-    <button class="btn go bclose" id="guideClose">CLOSE  ·  [G]</button>`;
+    <button class="btn go bclose" id="guideClose">CLOSE${inputMode==='tablet'?'':'  ·  [M]'}</button>`;
   el.querySelectorAll('.bthumb').forEach(cv2=>drawMonsterThumb(cv2,cv2.dataset.t,discovered.has(cv2.dataset.t)));
   const cl=document.getElementById('guideClose'); if(cl)cl.onclick=toggleGuide;
 }
@@ -2114,6 +2170,111 @@ function toggleGuide(){ guideOpen=!guideOpen; const o=document.getElementById('g
   if(guideOpen){ renderBestiary(); o.classList.add('on'); } else o.classList.remove('on'); }
 document.getElementById('guideBtn').onclick=toggleGuide;
 document.getElementById('guideOverlay').addEventListener('click',ev=>{ if(ev.target.id==='guideOverlay') toggleGuide(); });
+
+// ---- Patch notes — the whole build history, newest on top (curated by hand as we build) ----
+const PATCH_NOTES=[
+  {v:'00.10', tag:'current', t:'Persistent lanes · free move · versioning · input modes', items:[
+    'Added streams now LAYER on top — once a path is placed it never moves again, so your towers keep their exact spot for the whole game (old builds got stranded when the map regrew).',
+    'When the arena grows, existing lanes only stretch their two end-tiles out to the new edge; the interior is frozen.',
+    'Every tower gets ONE free relocate (G / ↪ MOVE button) — pick a new tile, then it\'s rooted for the rest of the game (or until a Phantom kills it).',
+    'Version tag + build commit under the SHOEMOCKER header.',
+    'This patch-notes panel (📓 PATCH).',
+    'Two input modes (🖱 KB + Mouse ↔ 📱 Tablet): KB disables left-click building (use hotkeys); Tablet drops every hotkey + key badge and builds by tapping. Descriptions adapt to the mode.',
+    'Keys: SELL is F, free MOVE is G, Monster Guide moved to M.',
+  ]},
+  {v:'00.09', t:'Growing arena & thin-lane rewrite', items:[
+    'The board now zooms out and grows a little every boss so it never gets too cramped to build.',
+    'Path generator scores candidates: never on a tower ≫ never 3-wide ≫ few 2-wide ≫ reach a minimum length that scales up per boss. 3-wide corridors are effectively eliminated.',
+  ]},
+  {v:'00.08', t:'Art polish & special-mob flair', items:[
+    'Venom is a glowing green skull; Demolition is a red dynamite bundle — no more confusing it with Cannon.',
+    'The hand-drawn tower art is now used everywhere: shop, radial wheel, DPS panel, guides.',
+    'Special monsters (exploder / froster / jolt / hex / boss) got cosmetic auras — pure eye-candy.',
+  ]},
+  {v:'00.07', t:'Laser tower & music', items:[
+    'LASER — a boss-token tower that fires a screen-wide beam hitting everything in its path. Starts as a fast, weak baby and levels into a slow, devastating wide beam (inverted scaling).',
+    'Boss-token towers (Psyche + Laser) are immune to enemy damage.',
+    '🎵 Music player — load local MP3s or embed a Spotify playlist, left of the speed control.',
+  ]},
+  {v:'00.06', t:'Placement & control overhaul', items:[
+    'Radial build wheel — click an empty tile, pick a tower from the ring.',
+    '1-5 hotkey favorites — hover a shop tile and press a number to bind it.',
+    'E locks all towers onto the monster under the cursor (focus-fire) until it dies.',
+    '` upgrades every same-type tower up to par in one press.',
+  ]},
+  {v:'00.05', t:'Guides & performance', items:[
+    'Monster Guide (Bestiary) — silhouettes until you kill one, then the real sprite + name + description.',
+    'Tower Guide — the reference card for every tower.',
+    'Towers-lost HUD stat; a big late-game FPS pass (color cache, particle cap, lighter reveal overlay).',
+  ]},
+  {v:'00.04', t:'Real sprites & signature abilities', items:[
+    'Hand-drawn tower sprites replace the plain squares.',
+    'Each tower unlocks a signature ability at Lv3, upgraded at Lv5 (ring at Lv3, star at Lv5).',
+    'Screen-shake tamed to only Phantom blasts + Demolition bombs; Phantom Hunt reworked to unlimited range.',
+  ]},
+  {v:'00.03', t:'Boss rewards & layout', items:[
+    'Boss-reward ability ladder: Overdrive (always on), Reveal @5, Phantom Hunt @10, Nuke @15, Stasis @20, Meteor Storm @25 — then endless.',
+    'One-line end scoreboard; height-capped side panels that scroll; a 1-tile border ring so edge-tower arrows aren\'t clipped.',
+  ]},
+  {v:'00.02', t:'Systems & QoL', items:[
+    'Pause (P / button); click or hover a DPS row to find that tower on the board.',
+    'Per-tower AND global attack modes (Near / Far / Str / Weak); round-vs-overall DPS tabs.',
+    'Abilities charge by kills (not real time); tower HP scales with level (phantom hits to kill == tower level).',
+  ]},
+  {v:'00.01', t:'First playable', items:[
+    'Core tower defense: procedural lanes, waves, gold + lives, boss cadence, five starter towers, live DPS panel, four difficulties.',
+  ]},
+];
+function renderPatchNotes(){ const el=document.getElementById('patchInner');
+  el.innerHTML=`<div class="arcade-top" style="color:var(--gold)">★ PATCH NOTES ★</div>
+    <h3>NEON DEFENSE</h3>
+    <p class="gsub">the whole build, newest first — press CLOSE or tap outside to return</p>
+    ${PATCH_NOTES.map(p=>`<div class="pnote${p.tag==='current'?' cur':''}">
+      <div class="pnh"><span class="pnv">v${p.v}</span><span class="pnt">${p.t}</span>${p.tag?`<span class="pntag">${p.tag}</span>`:''}</div>
+      <ul>${p.items.map(i=>`<li>${i}</li>`).join('')}</ul></div>`).join('')}
+    <button class="btn go bclose" id="patchClose" style="margin:14px auto 0;display:block">CLOSE</button>`;
+  const cl=document.getElementById('patchClose'); if(cl)cl.onclick=togglePatch;
+}
+function togglePatch(){ patchOpen=!patchOpen; const o=document.getElementById('patchOverlay');
+  if(patchOpen){ renderPatchNotes(); o.classList.add('on'); } else o.classList.remove('on'); }
+document.getElementById('patchBtn').onclick=togglePatch;
+document.getElementById('patchOverlay').addEventListener('click',ev=>{ if(ev.target.id==='patchOverlay') togglePatch(); });
+
+// ---- Input modes: Keyboard+Mouse (hotkeys, no click-to-build) vs Tablet (taps only, no hotkeys/badges) ----
+// Titles are set here so they only ever show keys for the mode you're in.
+const KEYHINTS=[
+  ['pauseBtn','Pause / resume','P'],
+  ['towerGuideBtn','Tower Guide','H'],
+  ['guideBtn','Monster Guide','M'],
+  ['patchBtn','Patch notes — the whole build history',null],
+  ['hasteBtn','+60% attack speed · recharges by kills','Z'],
+  ['phantomBtn','All towers hunt only Phantoms for 10s · unlocks at boss 10','X'],
+  ['revealBtn','Reveal the ghost routes for 10s · unlocks at boss 5','C'],
+  ['nukeBtn','Vaporize every normal mob (specials + bosses survive) · unlocks at boss 15','V'],
+  ['stasisBtn','Freeze EVERY enemy for 4s · unlocks at boss 20','B'],
+  ['meteorBtn','Rain meteors for 8s · unlocks at boss 25','N'],
+  ['upBtn','Upgrade this tower','Q'],
+  ['moveBtn','Relocate this tower ONCE for free — after that it\'s rooted for the game','G'],
+  ['sellBtn','Sell this tower','F'],
+  ['upAllBtn','Upgrade every same-type tower ≤ this level, up to this level +1','`'],
+];
+const SHOP_HINT={
+  kbm:'<b style="color:var(--ink)">Click a tower</b> then a tile to place it, or hover a tile + <b style="color:var(--cyan)">1-5</b> to hotkey a favorite. <b style="color:var(--cyan)">E</b> over a monster to <b style="color:var(--red)">lock-fire</b> it. <b style="color:var(--cyan)">Q</b> upgrade · <b style="color:var(--cyan)">`</b> upgrade all · <b style="color:var(--lime)">G</b> free-move · <b style="color:var(--red)">F</b> sell. Left-click build wheel is off in this mode — see the <b style="color:var(--purple)">🗼 Tower Guide</b> (H).',
+  tablet:'<b style="color:var(--ink)">Tap a tower</b> then a tile to place it, or <b style="color:var(--ink)">tap an empty tile</b> for the build wheel. Tap a placed tower to select it, then use its <b style="color:var(--purple)">Upgrade · Move · Sell</b> buttons. See the <b style="color:var(--purple)">🗼 Tower Guide</b>.',
+};
+function applyInputMode(mode){ inputMode=mode; try{ localStorage.setItem('neonInputMode',mode); }catch(_){}
+  document.body.classList.toggle('tablet', mode==='tablet');
+  const kbm = mode!=='tablet';
+  for(const [id,base,key] of KEYHINTS){ const el=document.getElementById(id); if(el) el.title = base + (kbm&&key?` · [${key}]`:''); }
+  const sh=document.getElementById('shopHint'); if(sh) sh.innerHTML = kbm?SHOP_HINT.kbm:SHOP_HINT.tablet;
+  const mb=document.getElementById('modeBtn'), ml=document.getElementById('modeLbl');
+  if(mb){ mb.firstChild.textContent = (kbm?'🖱 ':'📱 '); mb.title = kbm?'Input: Keyboard & Mouse — tap to switch to Tablet':'Input: Tablet — tap to switch to Keyboard & Mouse'; }
+  if(ml) ml.textContent = kbm?'KB + MOUSE':'TABLET';
+  cancelPlacement();   // dump any half-armed placement when the rules change
+}
+function toggleInputMode(){ applyInputMode(inputMode==='tablet'?'kbm':'tablet'); }
+document.getElementById('modeBtn').onclick=toggleInputMode;
+applyInputMode(inputMode);   // set titles + hint + badges on load
 
 // ---- Tower Guide — the reference for every tower (art + stats + description) ----
 function drawTowerThumb(cvEl,type){
@@ -2132,13 +2293,17 @@ function renderTowerGuide(){
   const entries=Object.entries(TOWER_TYPES);
   el.innerHTML=`<div class="arcade-top">★ TOWER GUIDE ★</div><h3>TOWERS</h3>
     <p class="gsub">Everything each tower does — the panel just shows the essentials.</p>
-    <div class="bestiary">${entries.map(([k,t])=>`<div class="bcard on">
-        <canvas class="bthumb" width="74" height="74" data-t="${k}"></canvas>
-        <div class="bname" style="color:${col(t.color)}">${t.icon} ${t.name}</div>
-        <div class="bcost" style="color:${t.bossCost?'var(--mag)':'var(--gold)'}">${t.bossCost?'💠'+t.bossCost:'🪙'+t.cost}${t.bossUnlock?' · after boss 1':''}</div>
+    <div class="tgwrap">${entries.map(([k,t])=>`<div class="tgcard">
+        <div class="tghead">
+          <canvas class="tgthumb" width="60" height="60" data-t="${k}"></canvas>
+          <div class="tgmeta">
+            <div class="bname" style="color:${col(t.color)}">${t.icon} ${t.name}</div>
+            <div class="bcost" style="color:${t.bossCost?'var(--mag)':'var(--gold)'}">${t.bossCost?'💠 '+t.bossCost+' boss credit':'🪙 '+t.cost}${t.bossUnlock?' · after boss 1':''}</div>
+          </div>
+        </div>
         <div class="bdesc">${t.desc}</div></div>`).join('')}</div>
-    <button class="btn go bclose" id="towerGuideClose">CLOSE  ·  [H]</button>`;
-  el.querySelectorAll('.bthumb').forEach(cv2=>drawTowerThumb(cv2,cv2.dataset.t));
+    <button class="btn go bclose" id="towerGuideClose">CLOSE${inputMode==='tablet'?'':'  ·  [H]'}</button>`;
+  el.querySelectorAll('.tgthumb').forEach(cv2=>drawTowerThumb(cv2,cv2.dataset.t));
   const cl=document.getElementById('towerGuideClose'); if(cl)cl.onclick=toggleTowerGuide;
 }
 function toggleTowerGuide(){ towerGuideOpen=!towerGuideOpen; const o=document.getElementById('towerGuideOverlay');
