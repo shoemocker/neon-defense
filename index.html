@@ -53,8 +53,11 @@
   h2{font-size:14px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin:2px 0 6px;border-bottom:1px solid var(--line);padding-bottom:5px}
   .card{background:var(--panel);border:2px solid var(--line);border-radius:10px;padding:12px}
   .shop{display:flex;flex-direction:column;gap:8px}
-  .tw{display:flex;gap:10px;align-items:center;text-align:left;background:var(--panel2);border:2px solid var(--line);
-    border-radius:10px;padding:8px 10px;cursor:pointer;color:var(--ink);font-family:inherit;transition:.1s;width:100%}
+  .tw{position:relative;display:flex;gap:10px;align-items:center;text-align:left;background:var(--panel2);border:2px solid var(--line);
+    border-radius:10px;padding:8px 10px;cursor:default;color:var(--ink);font-family:inherit;transition:.1s;width:100%}
+  .tw.dim{opacity:.45}
+  .tw .hk{position:absolute;top:5px;right:7px;min-width:19px;height:19px;padding:0 3px;border-radius:6px;display:none;place-items:center;
+    font-size:12px;font-weight:900;background:var(--cyan);color:#06202a;box-shadow:0 0 8px rgba(51,230,255,.55)}
   .tw:hover{border-color:var(--muted);transform:translateY(-1px)}
   .tw.sel{border-color:var(--cyan);box-shadow:0 0 14px rgba(51,230,255,.4)}
   .tw:disabled{opacity:.45;cursor:not-allowed;transform:none}
@@ -257,7 +260,8 @@
   <div class="leftbar">
     <h1>NEON DEFENSE</h1>
     <div class="card shop-card">
-      <h2>Towers — click, then place</h2>
+      <h2>Towers — hover + press 1-9</h2>
+      <div class="hint" style="margin:-2px 0 8px">Hover a tower and press <b style="color:var(--cyan)">1-9</b> to hotkey it. Then press that number and <b style="color:var(--ink)">left-click</b> the board to place. Or press <b style="color:var(--cyan)">E</b> for the radial picker.</div>
       <div class="shop" id="shop"></div>
     </div>
     <div class="card" id="selCard" style="display:none">
@@ -531,6 +535,15 @@ let towerId=0;            // stable per-tower id so DPS rows can point back at a
 let blankPlace=false;     // E-placement: a blank ghost follows the mouse; click opens the radial tower picker
 let radial=null;          // open radial picker: {c,r,x,y,rad,bubbles:[{type,x,y}]}
 let lastPlacedType=null;  // last tower type actually placed → E re-arms it for quick repeat
+// User hotkeys: digit → tower type. Bind by hovering a shop tile / radial bubble and pressing a number (persists).
+let hotkeys=(()=>{ try{ return JSON.parse(localStorage.getItem('neonDefenseHotkeys')||'{}'); }catch(_){ return {}; } })();
+let hoverShopType=null, hoverRadialType=null, mouseWX=0, mouseWY=0;
+function saveHotkeys(){ try{ localStorage.setItem('neonDefenseHotkeys',JSON.stringify(hotkeys)); }catch(_){} }
+function bindHotkey(d,type){ for(const k in hotkeys){ if(hotkeys[k]===type) delete hotkeys[k]; }   // 1:1 — a tower keeps only one key
+  hotkeys[d]=type; saveHotkeys(); refreshHotkeyBadges(); sfx('up');
+  texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.1,txt:'⌨ '+d+' → '+TOWER_TYPES[type].name,color:col(TOWER_TYPES[type].color),life:1.4,vy:-14,sz:18}); }
+function refreshHotkeyBadges(){ const byType={}; for(const d in hotkeys) byType[hotkeys[d]]=d;
+  document.querySelectorAll('.tw .hk').forEach(s=>{ const k=s.getAttribute('data-hk-for'); s.textContent=byType[k]||''; s.style.display=byType[k]?'grid':'none'; }); }
 let statsMode='round';    // 'round' (this wave only) | 'overall' (lifetime) — towers explode & lose overall damage
 let pendingBuff=null;     // buff chosen at boss spawn; claimed only if you kill the boss
 let hpMult=1, curDiff=null, introGuy=null;   // curDiff = chosen HP/coins; introGuy = the boss-intro character (cycles)
@@ -1447,15 +1460,18 @@ function drawRadial(){
   ctx.globalAlpha=.35; ctx.fillStyle=col('cyan'); ctx.fillRect(radial.c*TILE+8,radial.r*TILE+8,TILE-16,TILE-16); ctx.globalAlpha=1;
   ctx.setLineDash([4,5]); ctx.globalAlpha=.4; ctx.strokeStyle=col('cyan'); ctx.lineWidth=1.5;
   ctx.beginPath(); ctx.arc(radial.x,radial.y,radial.rad,0,6.283); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha=1;
-  const mc=hoverCell?center(hoverCell[0],hoverCell[1]):null;
+  const byType={}; for(const d in hotkeys) byType[hotkeys[d]]=d;   // reverse map for the hotkey badges
   for(const bub of radial.bubbles){ const b=TOWER_TYPES[bub.type], c=col(b.color);
     const afford=b.bossCost?bossCoins>=b.bossCost:coins>=b.cost;   // recomputed each frame → lights up the moment you can afford it
-    const hot = afford && mc && dist(mc.x,mc.y,bub.x,bub.y)<=20;   // only affordable bubbles react to hover
+    const hot = mouseWX && dist(mouseWX,mouseWY,bub.x,bub.y)<=20;  // hovering this bubble (afford or not — you can still hotkey it)
     ctx.globalAlpha=afford?1:.32;                                  // can't afford → dim + (radialPick blocks selecting it)
     ctx.fillStyle='#141126'; ctx.beginPath(); ctx.arc(bub.x,bub.y,hot?21:18,0,6.283); ctx.fill();
     ctx.strokeStyle=c; ctx.lineWidth=hot?3:2.4; ctx.shadowBlur=afford?(hot?16:9):0; ctx.shadowColor=c; ctx.stroke(); ctx.shadowBlur=0;
     ctx.font='18px "Courier New",monospace'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(b.icon,bub.x,bub.y+1);
     ctx.globalAlpha=1;
+    const d=byType[bub.type];   // hotkey badge on the bubble
+    if(d){ ctx.fillStyle=col('cyan'); ctx.beginPath(); ctx.arc(bub.x+15,bub.y-15,8,0,6.283); ctx.fill();
+      ctx.fillStyle='#06202a'; ctx.font='900 11px monospace'; ctx.fillText(d,bub.x+15,bub.y-14); }
   }
   ctx.restore();
 }
@@ -1473,15 +1489,18 @@ function buildShop(){
   const visible=Object.entries(TOWER_TYPES).filter(([k,t])=>!t.bossUnlock || bossTowersUnlocked);   // premium towers appear after boss 1
   if(shop.childElementCount!==visible.length){
     shop.innerHTML=visible.map(([k,t])=>`
-      <button class="tw" data-k="${k}">
+      <div class="tw" data-k="${k}">
+        <span class="hk" data-hk-for="${k}"></span>
         <span class="ic" style="background:${col(t.color)}22;color:${col(t.color)};border:1px solid ${col(t.color)}">${t.icon}</span>
         <span><span class="nm" style="color:${col(t.color)}">${t.name}</span><span class="ds">${t.desc}</span></span>
         <span class="cost"${t.bossCost?' style="color:var(--mag)"':''}>${t.bossCost?'💠'+t.bossCost:'🪙'+t.cost}</span>
-      </button>`).join('');
-    shop.querySelectorAll('.tw').forEach(el=>el.onclick=()=>{ build=build===el.dataset.k?null:el.dataset.k; selected=null; blankPlace=false; radial=null; refreshShopSel(); document.getElementById('selCard').style.display='none'; });
+      </div>`).join('');
+    shop.querySelectorAll('.tw').forEach(el=>{ el.onmouseenter=()=>hoverShopType=el.dataset.k;
+      el.onmouseleave=()=>{ if(hoverShopType===el.dataset.k) hoverShopType=null; }; });
   }
   shop.querySelectorAll('.tw').forEach(el=>{ const t=TOWER_TYPES[el.dataset.k];
-    el.disabled = t.bossCost ? bossCoins<t.bossCost : coins<t.cost; });
+    el.classList.toggle('dim', t.bossCost ? bossCoins<t.bossCost : coins<t.cost); });   // can't afford = dim (still hoverable to hotkey)
+  refreshHotkeyBadges();
   refreshShopSel();
 }
 function refreshShopSel(){ document.querySelectorAll('.tw').forEach(el=>el.classList.toggle('sel',el.dataset.k===build)); }
@@ -1607,8 +1626,9 @@ function radialPick(wx,wy){ if(!radial)return;
   radial=null; blankPlace=false;   // clicked outside any bubble → close
 }
 function cancelPlacement(){ build=null; blankPlace=false; radial=null; }
-cv.addEventListener('mousemove',ev=>{ const p=cellFromEvent(ev); hoverCell=[p.c,p.r]; });
-cv.addEventListener('mouseleave',()=>hoverCell=null);
+cv.addEventListener('mousemove',ev=>{ const p=cellFromEvent(ev); hoverCell=[p.c,p.r]; mouseWX=p.x; mouseWY=p.y;
+  hoverRadialType=null; if(radial){ for(const b of radial.bubbles){ if(dist(p.x,p.y,b.x,b.y)<=20){ hoverRadialType=b.type; break; } } } });
+cv.addEventListener('mouseleave',()=>{ hoverCell=null; hoverRadialType=null; });
 cv.addEventListener('click',ev=>{ audioInit(); const p=cellFromEvent(ev); const key=p.c+','+p.r;
   if(radial){ radialPick(p.x,p.y); return; }                       // radial open → pick a bubble (or miss to close)
   if(build){ if(placeTower(build,p.c,p.r) && !(TOWER_TYPES[build].bossCost ? bossCoins>=TOWER_TYPES[build].bossCost : coins>=TOWER_TYPES[build].cost)) build=null; return; }
@@ -1758,8 +1778,12 @@ window.addEventListener('keydown',ev=>{
   if(k==='p'){ togglePause(); ev.preventDefault(); return; }
   if(k==='g'){ toggleGuide(); ev.preventDefault(); return; }
   if(paused) return;
-  if(k>='1' && k<='9'){ const shop=document.getElementById('shop'); const btns=shop.querySelectorAll('.tw');
-    const el=btns[+k-1]; if(el && !el.disabled){ el.click(); ev.preventDefault(); } return; }
+  if(k>='1' && k<='9'){
+    if(hoverShopType){ bindHotkey(k, hoverShopType); }                    // hovering a shop tile → BIND the key
+    else if(radial && hoverRadialType){ bindHotkey(k, hoverRadialType); } // hovering a radial bubble → BIND the key
+    else if(hotkeys[k]){ build=hotkeys[k]; blankPlace=false; radial=null;  // else → ARM the bound tower (click to place)
+      selected=null; refreshShopSel(); document.getElementById('selCard').style.display='none'; }
+    ev.preventDefault(); return; }
   if(k==='q'){ upgradeSelected(); ev.preventDefault(); return; }
   if(k==='f'||k==='delete'||k==='backspace'){ sellSelected(); ev.preventDefault(); return; }
   if(k==='e'){   // E always shows the blank ghost first; a 2nd E (from blank) auto-arms your last-placed tower
