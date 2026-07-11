@@ -14,7 +14,7 @@
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
     font-family:"Courier New",ui-monospace,monospace;overflow:hidden}
-  #app{display:flex;gap:10px;padding:10px;height:100vh;align-items:stretch;justify-content:center}
+  #app{display:flex;gap:10px;padding:10px;height:100vh;align-items:flex-start;justify-content:center}
   .stage{position:relative;display:flex;flex-direction:column;gap:8px;min-width:0;flex:1 1 0;max-width:2000px}
   .topbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
   .stat{background:var(--panel);border:2px solid var(--line);border-radius:10px;padding:8px 15px;
@@ -33,8 +33,16 @@
   canvas{display:block;width:100%;height:auto;aspect-ratio:16/9;image-rendering:auto;background:#0a0817;cursor:crosshair}
   .scan{position:absolute;inset:0;pointer-events:none;border-radius:10px;
     background:repeating-linear-gradient(0deg,rgba(0,0,0,.14) 0 1px,transparent 1px 3px);mix-blend-mode:multiply}
-  .leftbar{width:304px;flex:none;display:flex;flex-direction:column;gap:10px;overflow-y:auto}
-  .panel{width:304px;flex:none;display:flex;flex-direction:column;gap:10px;overflow-y:auto;padding-right:2px}
+  /* Side columns are capped (in JS) to the middle board's height; content scrolls inside a designated child. */
+  .leftbar{width:304px;flex:none;display:flex;flex-direction:column;gap:10px;overflow:hidden}
+  .panel{width:304px;flex:none;display:flex;flex-direction:column;gap:10px;overflow:hidden;padding-right:2px}
+  /* LEFT: the tower shop scrolls; the selected-tower card stays pinned full-view at the bottom. */
+  .leftbar .shop-card{flex:1 1 auto;min-height:60px;display:flex;flex-direction:column;overflow:hidden}
+  .leftbar .shop-card .shop{flex:1 1 auto;min-height:0;overflow-y:auto;padding-right:2px}
+  #selCard{flex:none}
+  /* RIGHT: the DPS list scrolls once you have lots of towers; the rest of the panel stays put. */
+  .panel .stats-card{flex:1 1 auto;min-height:60px;display:flex;flex-direction:column;overflow:hidden}
+  .panel .stats-card #statsBody{flex:1 1 auto;min-height:0;overflow-y:auto;padding-right:2px}
   .attackbar{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;background:var(--panel);border:2px solid var(--line);border-radius:12px;padding:9px 12px}
   .attackbar .ablabel{font-size:13.5px;font-weight:700;letter-spacing:1px;color:var(--muted);white-space:nowrap}
   .attackbar .tgrid{display:flex;gap:8px}
@@ -104,7 +112,7 @@
   .diffbtn.gkool{border-color:#ff5a68} .diffbtn.gkool:hover{box-shadow:0 6px 20px rgba(255,90,104,.35)} .diffbtn.gkool .dn{color:#ff5a68}
   .diffbtn.gbrute{border-color:#5bbd5f} .diffbtn.gbrute:hover{box-shadow:0 6px 20px rgba(91,189,95,.35)} .diffbtn.gbrute .dn{color:#5bbd5f}
   .diffbtn.gdemon{border-color:#c02fff} .diffbtn.gdemon:hover{box-shadow:0 6px 20px rgba(192,47,255,.4)} .diffbtn.gdemon .dn{color:#c02fff}
-  .modal.gameover{max-width:480px;text-align:center}
+  .modal.gameover{max-width:620px;text-align:center}
   .modal.gameover p{color:var(--muted);font-size:15px;margin:0 0 6px}
   .modal.gameover h2{margin:12px 0 6px}
   .go-title{font-size:34px;letter-spacing:3px;margin:0 0 6px;font-weight:900}
@@ -185,9 +193,33 @@
   .reveal.cool{background:var(--panel);border-color:var(--line);color:var(--faint);box-shadow:none}
   .reveal.cool::before{content:'';display:inline-block;width:7px;height:7px;margin-right:6px;border-radius:50%;
     background:var(--faint);vertical-align:middle}
-  .scoreboard{margin:6px auto 0;border-collapse:collapse;font-size:14px;width:100%;max-width:460px}
-  .scoreboard th{color:var(--muted);font-size:12px;letter-spacing:1px;padding:4px 9px;border-bottom:1px solid var(--line)}
-  .scoreboard td{padding:3px 8px;text-align:center;font-variant-numeric:tabular-nums}
+  /* NUKE (boss 15) — red/orange fireball */
+  .nuke{position:relative;overflow:hidden;width:auto!important;padding:9px 18px!important;white-space:nowrap;border-radius:10px;font-weight:900;letter-spacing:1px;
+    background:var(--panel2);border:2px solid var(--red);color:#ff8f9c;box-shadow:0 0 12px rgba(255,77,94,.35)}
+  .nuke:hover:not(:disabled){border-color:#ff8f9c;box-shadow:0 0 20px rgba(255,77,94,.65);transform:translateY(-1px)}
+  .nuke.active{background:var(--panel2);border:2px solid #ffd08a;color:#fff2df;animation:nukepulse .6s ease-in-out infinite}
+  @keyframes nukepulse{0%,100%{box-shadow:0 0 16px rgba(255,122,58,.6)}50%{box-shadow:0 0 34px rgba(255,180,58,1),inset 0 0 14px rgba(255,220,120,.4)}}
+  .nuke.cool{background:var(--panel);border-color:var(--line);color:var(--faint);box-shadow:none}
+  .nuke.cool::before{content:'';display:inline-block;width:7px;height:7px;margin-right:6px;border-radius:50%;background:var(--faint);vertical-align:middle}
+  /* STASIS (boss 20) — ice-blue time-freeze */
+  .stasis{position:relative;overflow:hidden;width:auto!important;padding:9px 18px!important;white-space:nowrap;border-radius:10px;font-weight:900;letter-spacing:1px;
+    background:var(--panel2);border:2px solid var(--ice);color:#bfe4ff;box-shadow:0 0 12px rgba(126,200,255,.35)}
+  .stasis:hover:not(:disabled){border-color:#eafcff;box-shadow:0 0 20px rgba(126,200,255,.65);transform:translateY(-1px)}
+  .stasis.active{background:var(--panel2);border:2px solid #eafcff;color:#eafcff;animation:stasispulse 1s ease-in-out infinite}
+  @keyframes stasispulse{0%,100%{box-shadow:0 0 14px rgba(126,200,255,.5)}50%{box-shadow:0 0 32px rgba(190,233,255,.95),inset 0 0 14px rgba(255,255,255,.3)}}
+  .stasis.cool{background:var(--panel);border-color:var(--line);color:var(--faint);box-shadow:none}
+  .stasis.cool::before{content:'';display:inline-block;width:7px;height:7px;margin-right:6px;border-radius:50%;background:var(--faint);vertical-align:middle}
+  /* METEOR STORM (boss 25) — molten gold/orange rain */
+  .meteor{position:relative;overflow:hidden;width:auto!important;padding:9px 18px!important;white-space:nowrap;border-radius:10px;font-weight:900;letter-spacing:1px;
+    background:var(--panel2);border:2px solid var(--gold);color:#ffe08a;box-shadow:0 0 12px rgba(255,207,58,.35)}
+  .meteor:hover:not(:disabled){border-color:#fff0b8;box-shadow:0 0 20px rgba(255,207,58,.65);transform:translateY(-1px)}
+  .meteor.active{background:var(--panel2);border:2px solid #ffb347;color:#fff2df;animation:meteorpulse .5s ease-in-out infinite}
+  @keyframes meteorpulse{0%,100%{box-shadow:0 0 16px rgba(255,122,58,.6)}50%{box-shadow:0 0 32px rgba(255,80,40,1),inset 0 0 14px rgba(255,180,58,.45)}}
+  .meteor.cool{background:var(--panel);border-color:var(--line);color:var(--faint);box-shadow:none}
+  .meteor.cool::before{content:'';display:inline-block;width:7px;height:7px;margin-right:6px;border-radius:50%;background:var(--faint);vertical-align:middle}
+  .scoreboard{margin:6px auto 0;border-collapse:collapse;font-size:13px;width:100%;max-width:560px}
+  .scoreboard th{color:var(--muted);font-size:11px;letter-spacing:.5px;padding:4px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+  .scoreboard td{padding:3px 8px;text-align:center;font-variant-numeric:tabular-nums;white-space:nowrap}
   .scoreboard tbody tr:first-child{background:rgba(255,207,58,.08)}
   /* themed scrollbars (neon thumb on dark track) — Firefox + WebKit */
   .panel,.leftbar,.modal{scrollbar-width:thin;scrollbar-color:#8a6bff var(--panel2)}
@@ -203,7 +235,7 @@
 <div id="app">
   <div class="leftbar">
     <h1>NEON DEFENSE</h1>
-    <div class="card">
+    <div class="card shop-card">
       <h2>Towers — click, then place</h2>
       <div class="shop" id="shop"></div>
     </div>
@@ -235,16 +267,19 @@
       <div class="overlay" id="overlay"><div id="overlayInner"></div></div>
     </div>
     <div class="attackbar">
-      <span class="ablabel">🎯 ATTACK MODE — ALL TOWERS</span>
+      <span class="ablabel">🎯 GLOBAL ATTACK MODE <span style="color:var(--faint);font-weight:400">(every tower on “Auto”)</span></span>
       <div class="tgrid" id="tmode">
-        <button class="tbtn" data-m="close">Closest</button>
-        <button class="tbtn" data-m="far">Farthest</button>
-        <button class="tbtn" data-m="strong">Most HP</button>
-        <button class="tbtn" data-m="weak">Least HP</button>
+        <button class="tbtn" data-m="close">Near</button>
+        <button class="tbtn" data-m="far">Far</button>
+        <button class="tbtn" data-m="strong">Str</button>
+        <button class="tbtn" data-m="weak">Weak</button>
       </div>
-      <button class="haste" id="hasteBtn" title="+60% attack speed for 30s · 5-min cooldown">⚡ OVERDRIVE</button>
-      <button class="phantom" id="phantomBtn" title="All towers hunt only Phantoms for 10s · 60s cooldown" style="display:none">👻 PHANTOM HUNT</button>
-      <button class="reveal" id="revealBtn" title="Reveal the ghost routes for 10s · 5-min cooldown" style="display:none">🗺 REVEAL PATH</button>
+      <button class="haste" id="hasteBtn" title="+60% attack speed · recharges by kills">⚡ OVERDRIVE</button>
+      <button class="phantom" id="phantomBtn" title="All towers hunt only Phantoms for 10s · unlocks at boss 10" style="display:none">👻 PHANTOM HUNT</button>
+      <button class="reveal" id="revealBtn" title="Reveal the ghost routes for 10s · unlocks at boss 5" style="display:none">🗺 REVEAL PATH</button>
+      <button class="nuke" id="nukeBtn" title="Blow up the whole board · unlocks at boss 15" style="display:none">☢ NUKE</button>
+      <button class="stasis" id="stasisBtn" title="Freeze EVERY enemy for 4s · unlocks at boss 20" style="display:none">⏳ STASIS</button>
+      <button class="meteor" id="meteorBtn" title="Rain meteors for 8s · unlocks at boss 25" style="display:none">☄ METEOR STORM</button>
     </div>
   </div>
   <div class="panel">
@@ -254,7 +289,7 @@
       <h2>Global Buffs — from bosses</h2>
       <div class="buffs" id="buffs"><span class="hint">Kill a boss to earn a permanent buff for ALL towers.</span></div>
     </div>
-    <div class="card" id="statsCard">
+    <div class="card stats-card" id="statsCard">
       <h2>📊 Tower DPS — live</h2>
       <div class="dpstabs" id="dpstabs">
         <button class="dt on" data-mode="round">THIS ROUND</button>
@@ -368,7 +403,8 @@ const isRoad=(c,r)=>roadSet.has(c+','+r);
 const buildable=(c,r)=>c>=0&&c<worldCols&&r>=0&&r<worldRows&&!isRoad(c,r);
 // camera: scale the whole world to fit the canvas; eases toward the new fit on expansion (the zoom-out)
 let viewScale=1, camOffx=0, camOffy=0;
-function fitScale(){ return Math.min(W/(worldCols*TILE), H/(worldRows*TILE)); }
+const PAD=1;   // always keep a 1-tile border ring of blocks around the arena (so edge towers' arrows aren't clipped)
+function fitScale(){ return Math.min(W/((worldCols+2*PAD)*TILE), H/((worldRows+2*PAD)*TILE)); }
 function updateCam(dt){ const tgt=fitScale(); viewScale+=(tgt-viewScale)*Math.min(1,dt*1.5);   // gentle, cinematic zoom
   camOffx=(W-worldCols*TILE*viewScale)/2; camOffy=(H-worldRows*TILE*viewScale)/2; }
 function screenToWorld(px,py){ return {x:(px-camOffx)/viewScale, y:(py-camOffy)/viewScale}; }
@@ -376,7 +412,18 @@ function expandMap(){                              // called when a boss wave cl
   addLane(); relayout(); relocateTowersOffRoads();   // roads shifted — never leave a tower buried under a path
   shake=Math.max(shake,18);
   texts.push({x:worldCols*TILE/2,y:worldRows*TILE/2,txt:'▣ STREAM '+lanes.length+' — LANES CROSSING',color:col('cyan'),life:2.4,vy:-14,sz:26});
-  if(lanes.length>=3 && !revealUnlocked) unlockReveal();   // beating the 2nd boss (3rd lane) reveals the map tool
+}
+// Boss-reward unlocks — each boss (waves 5/10/15/20/25) hands you a new ability, then it's endless.
+function announce(txt,c){ texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.14,txt,color:c,life:2.6,vy:-14,sz:24}); }
+function popInBtn(id){ const b=document.getElementById(id); if(!b)return; b.style.display='';
+  if(b.animate) b.animate([{opacity:0,transform:'scale(.4) translateY(6px)'},{opacity:1,transform:'scale(1.15)',offset:.6},{transform:'scale(1)'}],{duration:640,easing:'ease-out'}); }
+function bossUnlocks(){
+  if(wave>=5  && !revealUnlocked) unlockReveal();
+  if(wave>=10 && !phantomUnlocked) unlockPhantomHunt();
+  if(wave>=15 && !nukeUnlocked){ nukeUnlocked=true; nukeMark=kills-NUKE_KILLS; popInBtn('nukeBtn'); announce('☢ NUKE UNLOCKED',col('red')); updateNukeBtn(); }
+  if(wave>=20 && !stasisUnlocked){ stasisUnlocked=true; stasisMark=kills-STASIS_KILLS; popInBtn('stasisBtn'); announce('⏳ STASIS UNLOCKED',col('ice')); updateStasisBtn(); }
+  if(wave>=25 && !meteorUnlocked){ meteorUnlocked=true; meteorMark=kills-METEOR_KILLS; popInBtn('meteorBtn'); announce('☄ METEOR STORM UNLOCKED',col('gold')); updateMeteorBtn(); }
+  if(wave===25) announce('☄ ENDLESS MODE — HOW FAR CAN YOU GO?',col('mag'));
 }
 function unlockReveal(){
   revealUnlocked=true; revealMark=kills-REVEAL_KILLS;   // ready to fire the moment it unlocks
@@ -438,8 +485,15 @@ let hasteUntil=0, hasteMark=0;      // Overdrive: +atk speed for its duration; c
 const HASTE_DUR=30, HASTE_KILLS=35, HASTE_MULT=1.6;
 let phantomUnlocked=false, phantomUntil=0, phantomMark=0;   // Phantom Hunt: appears once a Phantom kills a tower
 const PHUNT_DUR=10, PHUNT_KILLS=15;    // 10s of towers targeting ONLY Phantoms; recharge = 15 kills
-let revealUnlocked=false, revealUntil=0, revealMark=0;     // Reveal Path: unlocks after the 2nd boss (3rd lane)
+let revealUnlocked=false, revealUntil=0, revealMark=0;     // Reveal Path: unlocks at boss 5
 const REVEAL_DUR=10, REVEAL_KILLS=25; // shows the ghost routes for 10s; recharge = 25 kills
+// Three boss-reward abilities unlocked at bosses 15 / 20 / 25:
+let nukeUnlocked=false, nukeMark=0;                        // ☢ NUKE (boss 15) — instant board-wide blast
+const NUKE_KILLS=45;
+let stasisUnlocked=false, stasisUntil=0, stasisMark=0;     // ⏳ STASIS (boss 20) — freeze every enemy
+const STASIS_DUR=4, STASIS_KILLS=40;
+let meteorUnlocked=false, meteorUntil=0, meteorMark=0, meteorT=0;   // ☄ METEOR STORM (boss 25) — raining AoE
+const METEOR_DUR=8, METEOR_KILLS=50;
 // Duke-Nukem-style difficulty: ghost HP mult + starting coins + a trash-talking intro guy per tier
 const DIFFS=[
   {name:'Piece of Cake', hp:1.0, coins:200, guy:'baby',  cry:'NAP TIME, BABY?',  c1:'#ff9ecb'},
@@ -455,12 +509,13 @@ function reset(){
   occupancy={}; build=null; selected=null; state='ready'; pendingBuff=null;
   spawnQueue=[]; spawnT=0; shake=0; hoverCell=null; waveActive=false; countdown=GAP_BOSS; introT=0; statsTimer=0; armed=false;
   lanes=[]; addLane(); relayout(); viewScale=fitScale(); updateCam(1);
-  hasteUntil=0; hasteMark=-HASTE_KILLS;   // start with Overdrive charged; then it costs kills to recharge
+  hasteUntil=0; hasteMark=-HASTE_KILLS;   // Overdrive is ALWAYS available (charged at start), then costs kills
   phantomUnlocked=false; phantomUntil=0; phantomMark=0;
   revealUnlocked=false; revealUntil=0; revealMark=0;
+  nukeUnlocked=false; nukeMark=0; stasisUnlocked=false; stasisUntil=0; stasisMark=0;
+  meteorUnlocked=false; meteorUntil=0; meteorMark=0; meteorT=0;
   hlTower=null; if(paused)togglePause();   // clear any pause on a fresh game
-  const pb=document.getElementById('phantomBtn'); if(pb)pb.style.display='none';
-  const rb=document.getElementById('revealBtn'); if(rb)rb.style.display='none';
+  ['phantomBtn','revealBtn','nukeBtn','stasisBtn','meteorBtn'].forEach(id=>{ const b=document.getElementById(id); if(b)b.style.display='none'; });
   syncUI(); buildShop(); refreshWaveBtn(); updateHasteBtn(); showIntro();
 }
 
@@ -698,7 +753,6 @@ function exploderExplode(e){
   const survived=inRange.length-dead.length;
   if(dead.length) texts.push({x:e.x,y:e.y-e.r-6,txt:'💥 '+dead.length+' TOWER'+(dead.length>1?'S':'')+' DOWN',color:'#fff',life:1.5,vy:-22,sz:16});
   else if(survived) texts.push({x:e.x,y:e.y-e.r-6,txt:'🛡 '+survived+' TANKED IT',color:col('lime'),life:1.3,vy:-22,sz:15});
-  if(dead.length && !phantomUnlocked) unlockPhantomHunt();   // it took a tower → the retaliation button appears
 }
 // ---- Frostbite detonation — encases nearby towers in ice (5s frozen, 3s thaw), same kaboom ----
 function frosterFreeze(e){
@@ -810,6 +864,13 @@ function update(dt){
   // planted dynamite — count down the fuse, then blow
   for(const bm of bombs){ bm.fuse-=g; if(bm.fuse<=0){ bombExplode(bm); bm.dead=true; } }
   bombs=bombs.filter(b=>!b.dead);
+  // ☄ Meteor Storm — while active, rain AoE strikes onto random live enemies
+  if(now()<meteorUntil){ meteorT-=g;
+    if(meteorT<=0){ meteorT=0.18; const live=enemies.filter(e=>e.hp>0);
+      const mx = live.length ? live[Math.floor(rand(0,live.length))].x+rand(-45,45) : rand(0,worldCols*TILE);
+      const my = live.length ? live[Math.floor(rand(0,live.length))].y+rand(-45,45) : rand(0,worldRows*TILE);
+      const R=95, dmg=150+wave*16; explosion(mx,my,R*0.95,'#ff9a3a'); shake=Math.max(shake,6); sfx('boom');
+      for(const en of enemies){ if(en.hp>0){ const d=dist(mx,my,en.x,en.y); if(d<=R) damage(en, dmg*(1-0.3*d/R), false, null); } } } }
   // wave complete?
   // Boss solo phase: once its escorts are dead, ramp the speed one step every 5s up to the max
   const bossSolo = waveActive && (wave%5===0) && spawnQueue.length===0 && enemies.length>0 && enemies.every(e=>e.boss);
@@ -821,7 +882,7 @@ function update(dt){
     waveActive=false; const wasBoss=(wave%5===0);
     setSpeed(userSpeedIdx);   // restore the player's chosen speed after the wave
     coins+=10+wave*2; texts.push({x:worldCols*TILE/2,y:worldRows*TILE/2,txt:'WAVE CLEAR +'+(10+wave*2),color:col('cyan'),life:1.6,vy:-16,sz:26});
-    if(wasBoss) expandMap();   // beat the boss → the map grows: new land + a new stream from here on
+    if(wasBoss){ expandMap(); bossUnlocks(); }   // beat the boss → grow the map + hand out the next ability
     state='idle'; countdown=(wasBoss?GAP_BOSS:GAP_NORMAL);
     refreshWaveBtn();
   }
@@ -848,12 +909,12 @@ function render(){
   ctx.save();
   if(shake>0)ctx.translate(rand(-shake,shake),rand(-shake,shake));
   ctx.translate(camOffx,camOffy); ctx.scale(viewScale,viewScale);   // camera — the whole world scales to fit
-  const WW=worldCols*TILE, WH=worldRows*TILE;
-  // ground grid
-  ctx.fillStyle='#0a0817'; ctx.fillRect(-40,-40,WW+80,WH+80);
+  const WW=worldCols*TILE, WH=worldRows*TILE, P=PAD*TILE;
+  // ground grid — drawn PAD tiles past every edge so there's always a border ring of blocks around the play area
+  ctx.fillStyle='#0a0817'; ctx.fillRect(-P-40,-P-40,WW+2*P+80,WH+2*P+80);
   ctx.strokeStyle=col('line'); ctx.globalAlpha=.5; ctx.lineWidth=1;
-  for(let c=0;c<=worldCols;c++){ctx.beginPath();ctx.moveTo(c*TILE,0);ctx.lineTo(c*TILE,WH);ctx.stroke();}
-  for(let r=0;r<=worldRows;r++){ctx.beginPath();ctx.moveTo(0,r*TILE);ctx.lineTo(WW,r*TILE);ctx.stroke();}
+  for(let c=-PAD;c<=worldCols+PAD;c++){ctx.beginPath();ctx.moveTo(c*TILE,-P);ctx.lineTo(c*TILE,WH+P);ctx.stroke();}
+  for(let r=-PAD;r<=worldRows+PAD;r++){ctx.beginPath();ctx.moveTo(-P,r*TILE);ctx.lineTo(WW+P,r*TILE);ctx.stroke();}
   ctx.globalAlpha=1;
   // road
   for(const key of roadSet){ const [c,r]=key.split(',').map(Number);
@@ -1281,8 +1342,7 @@ function renderStats(){
   const round=statsMode==='round';
   const dmgOf=t=> (round?t.dmgRound:t.dmgTotal)||0;
   const timeOf=t=> (round?t.roundTime:t.combatTime)||0;
-  const all=[...towers].sort((a,b)=>dmgOf(b)-dmgOf(a));   // board grows/shrinks with your fleet, capped at 20 rows
-  const list=all.slice(0,20);
+  const list=[...towers].sort((a,b)=>dmgOf(b)-dmgOf(a));   // every tower listed — the panel is height-capped and scrolls
   const max=Math.max(1,...list.map(dmgOf));
   let rows=list.map(t=>{ const b=TOWER_TYPES[t.type];
     const dps=(timeOf(t)>0.3)?(dmgOf(t)/timeOf(t)):0, pct=Math.round(dmgOf(t)/max*100);
@@ -1291,7 +1351,6 @@ function renderStats(){
       +`<span class="sname" style="color:${col(b.color)}">${frozen?'❄ ':''}${b.icon} ${b.name} <span style="color:var(--faint)">L${t.level}</span></span>`
       +`<span class="sval">${Math.round(dmgOf(t)).toLocaleString()} · <b style="color:var(--ink)">${dps.toFixed(0)}/s</b></span></div>`;
   }).join('');
-  if(all.length>20) rows+=`<div class="strow" style="justify-content:center;color:var(--faint);background:transparent">+ ${all.length-20} more towers</div>`;
   el.innerHTML=rows;
   // click a row → select that tower; hover → beacon it on the board
   el.querySelectorAll('.strow.clk').forEach(row=>{ const t=towers.find(x=>x.id===+row.dataset.id); if(!t)return;
@@ -1385,6 +1444,39 @@ function fireReveal(){ if(!revealUnlocked)return; const t=now(); if(t>=revealUnt
   revealUntil=t+REVEAL_DUR; revealMark=kills; sfx('up');
   texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.14,txt:'🗺 PATHS REVEALED!',color:col('gold'),life:1.6,vy:-16,sz:26}); updateRevealBtn(); } }
 revealBtn.onclick=fireReveal;
+// ---- ☢ NUKE (boss 15) — instant board-wide blast, no duration ----
+const nukeBtn=document.getElementById('nukeBtn');
+function updateNukeBtn(){ if(!nukeUnlocked)return; const ch=Math.min(NUKE_KILLS,kills-nukeMark);
+  if(ch>=NUKE_KILLS){ nukeBtn.className='nuke'; nukeBtn.disabled=false; nukeBtn.textContent='☢ NUKE'; }
+  else { nukeBtn.className='nuke cool'; nukeBtn.disabled=true; nukeBtn.textContent='☢ '+ch+'/'+NUKE_KILLS+' kills'; } }
+function fireNuke(){ if(!nukeUnlocked)return; if(kills-nukeMark>=NUKE_KILLS){ audioInit(); nukeMark=kills; sfx('phantom');
+  const dmg=400+wave*45; shake=Math.max(shake,32);
+  for(const e of [...enemies]){ if(e.hp<=0)continue; explosion(e.x,e.y,e.r+14,'#fff'); damage(e,dmg,false,null); }
+  explosion(worldCols*TILE/2,worldRows*TILE/2,300,'#ffcf3a');
+  texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.14,txt:'☢ NUKE!',color:col('gold'),life:1.6,vy:-16,sz:30}); updateNukeBtn(); } }
+nukeBtn.onclick=fireNuke;
+// ---- ⏳ STASIS (boss 20) — freeze every enemy (bosses resist to half) ----
+const stasisBtn=document.getElementById('stasisBtn');
+function updateStasisBtn(){ if(!stasisUnlocked)return; const t=now(), ch=Math.min(STASIS_KILLS,kills-stasisMark);
+  if(t<stasisUntil){ stasisBtn.className='stasis active'; stasisBtn.disabled=true; stasisBtn.textContent='⏳ FROZEN '+Math.ceil(stasisUntil-t)+'s'; }
+  else if(ch>=STASIS_KILLS){ stasisBtn.className='stasis'; stasisBtn.disabled=false; stasisBtn.textContent='⏳ STASIS'; }
+  else { stasisBtn.className='stasis cool'; stasisBtn.disabled=true; stasisBtn.textContent='⏳ '+ch+'/'+STASIS_KILLS+' kills'; } }
+function fireStasis(){ if(!stasisUnlocked)return; const t=now(); if(t>=stasisUntil && kills-stasisMark>=STASIS_KILLS){ audioInit();
+  stasisUntil=t+STASIS_DUR; stasisMark=kills; sfx('freezeboom');
+  for(const e of enemies){ if(e.hp<=0)continue; e.holdUntil=Math.max(e.holdUntil||0, t+(e.boss?STASIS_DUR*0.5:STASIS_DUR)); }
+  explosion(worldCols*TILE/2,worldRows*TILE/2,150,col('ice')); shake=Math.max(shake,16);
+  texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.14,txt:'⏳ STASIS!',color:col('ice'),life:1.6,vy:-16,sz:30}); updateStasisBtn(); } }
+stasisBtn.onclick=fireStasis;
+// ---- ☄ METEOR STORM (boss 25) — sustained raining AoE (strikes handled in update) ----
+const meteorBtn=document.getElementById('meteorBtn');
+function updateMeteorBtn(){ if(!meteorUnlocked)return; const t=now(), ch=Math.min(METEOR_KILLS,kills-meteorMark);
+  if(t<meteorUntil){ meteorBtn.className='meteor active'; meteorBtn.disabled=true; meteorBtn.textContent='☄ RAINING '+Math.ceil(meteorUntil-t)+'s'; }
+  else if(ch>=METEOR_KILLS){ meteorBtn.className='meteor'; meteorBtn.disabled=false; meteorBtn.textContent='☄ METEOR STORM'; }
+  else { meteorBtn.className='meteor cool'; meteorBtn.disabled=true; meteorBtn.textContent='☄ '+ch+'/'+METEOR_KILLS+' kills'; } }
+function fireMeteor(){ if(!meteorUnlocked)return; const t=now(); if(t>=meteorUntil && kills-meteorMark>=METEOR_KILLS){ audioInit();
+  meteorUntil=t+METEOR_DUR; meteorMark=kills; meteorT=0; sfx('phantom');
+  texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.14,txt:'☄ METEOR STORM!',color:col('gold'),life:1.6,vy:-16,sz:30}); updateMeteorBtn(); } }
+meteorBtn.onclick=fireMeteor;
 function upgradeSelected(){ if(!selected)return; const c=upCost(selected);
   if(coins>=c && selected.level<12){ coins-=c; selected.level++; selected.maxhp=maxHp(selected); selected.hp=selected.maxhp; sfx('up'); syncUI(); }
   else sfx('nope'); }
@@ -1465,17 +1557,28 @@ window.addEventListener('keydown',ev=>{
   if(k==='z'){ fireHaste(); ev.preventDefault(); return; }
   if(k==='x'){ firePhantom(); ev.preventDefault(); return; }
   if(k==='c'){ fireReveal(); ev.preventDefault(); return; }
+  if(k==='v'){ fireNuke(); ev.preventDefault(); return; }
+  if(k==='b'){ fireStasis(); ev.preventDefault(); return; }
+  if(k==='n'){ fireMeteor(); ev.preventDefault(); return; }
   if(k==='escape'){ build=null; selected=null; hlTower=null; refreshShopSel(); document.getElementById('selCard').style.display='none'; ev.preventDefault(); }
 });
+
+// ---- Keep the side panels exactly as tall as the middle board (then they scroll inside) ----
+function fitPanels(){ const stage=document.querySelector('.stage'); if(!stage)return;
+  const h=stage.offsetHeight; if(h<80)return;
+  const lb=document.querySelector('.leftbar'), pn=document.querySelector('.panel');
+  if(lb) lb.style.height=h+'px'; if(pn) pn.style.height=h+'px'; }
+window.addEventListener('resize',fitPanels);
+if(window.ResizeObserver){ const so=new ResizeObserver(fitPanels); const st=document.querySelector('.stage'); if(st)so.observe(st); }
 
 // ---- Main loop ----
 let last=now();
 function loop(){ const t=now(); let dt=t-last; last=t; if(dt>0.05)dt=0.05;
   if(!paused) update(dt);
-  render(); updateHasteBtn(); updatePhantomBtn(); updateRevealBtn();
+  render(); updateHasteBtn(); updatePhantomBtn(); updateRevealBtn(); updateNukeBtn(); updateStasisBtn(); updateMeteorBtn();
   statsTimer-=dt; if(statsTimer<=0){ renderStats(); statsTimer=0.3; }
   requestAnimationFrame(loop); }
-reset(); renderBuffs(); loop();
+reset(); renderBuffs(); fitPanels(); requestAnimationFrame(fitPanels); loop();
 </script>
 </body>
 </html>
