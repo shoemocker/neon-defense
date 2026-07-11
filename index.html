@@ -334,7 +334,8 @@
 // NEON DEFENSE — a data-driven 8-bit tower defense.
 // Add a tower: drop an entry in TOWER_TYPES. Add an enemy: ENEMY_TYPES. That's it.
 // ---------------------------------------------------------------------------
-const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const cv = document.getElementById('cv');
+let ctx = cv.getContext('2d');   // reassignable so the Bestiary can retarget the real enemy-draw code onto a thumbnail canvas
 const W = cv.width, H = cv.height, TILE = 60, COLS = W/TILE, ROWS = H/TILE;
 // now() is a PAUSE-AWARE clock — it stops advancing while the game is paused, so every timer/animation
 // (ability durations, freezes, pulses) freezes with it. Real wall-time paused is banked in pausedAccum.
@@ -1336,6 +1337,7 @@ function drawEnemy(e){
   if(e.slowUntil>now()){ ctx.strokeStyle=col('ice'); ctx.lineWidth=2.5; ctx.globalAlpha=.9;
     ctx.beginPath(); ctx.moveTo(-R,sk); ctx.lineTo(-R,cy); ctx.arc(0,cy,R,Math.PI,2*Math.PI); ctx.lineTo(R,sk); ctx.stroke(); ctx.globalAlpha=1; }
   ctx.restore();
+  if(e.thumb) return;   // Bestiary thumbnail — no hp bar / label
   // hp bar
   const w=R*2, hpf=clamp(e.hp/e.maxhp,0,1);
   ctx.fillStyle='#000'; ctx.fillRect(e.x-w/2,e.y-R-10,w,4);
@@ -1369,6 +1371,7 @@ function drawPhantom(e){
   // pulsing warning ring as it nears its detonation point
   if(!e.exploded && charge>0.55){ ctx.strokeStyle='#fff'; ctx.globalAlpha=(charge-0.55)/0.45*Math.abs(Math.sin(now()*13)); ctx.lineWidth=3;
     ctx.beginPath(); ctx.arc(e.x,e.y,R+9+charge*12,0,6.283); ctx.stroke(); ctx.globalAlpha=1; }
+  if(e.thumb) return;   // Bestiary thumbnail — no hp bar / label
   // hp bar
   const w=R*2, hpf=clamp(e.hp/e.maxhp,0,1);
   ctx.fillStyle='#000'; ctx.fillRect(e.x-w/2,e.y-R-11,w,4);
@@ -1397,6 +1400,7 @@ function drawFroster(e){
   // pulsing warning ring near detonation
   if(!e.exploded && charge>0.55){ ctx.strokeStyle='#bfe9ff'; ctx.globalAlpha=(charge-0.55)/0.45*Math.abs(Math.sin(now()*13)); ctx.lineWidth=3;
     ctx.beginPath(); ctx.arc(e.x,e.y,R+9+charge*12,0,6.283); ctx.stroke(); ctx.globalAlpha=1; }
+  if(e.thumb) return;   // Bestiary thumbnail — no hp bar / label
   // hp bar + label
   const w=R*2, hpf=clamp(e.hp/e.maxhp,0,1);
   ctx.fillStyle='#000'; ctx.fillRect(e.x-w/2,e.y-R-11,w,4);
@@ -1422,6 +1426,7 @@ function drawSpectre(e,body,eye,glowDark,label,glyph){
   ctx.restore();
   if(!e.exploded && charge>0.55){ ctx.strokeStyle=body; ctx.globalAlpha=(charge-0.55)/0.45*Math.abs(Math.sin(now()*13)); ctx.lineWidth=3;
     ctx.beginPath(); ctx.arc(e.x,e.y,R+9+charge*12,0,6.283); ctx.stroke(); ctx.globalAlpha=1; }
+  if(e.thumb) return;   // Bestiary thumbnail — no hp bar / label
   const w=R*2, hpf=clamp(e.hp/e.maxhp,0,1);
   ctx.fillStyle='#000'; ctx.fillRect(e.x-w/2,e.y-R-11,w,4);
   ctx.fillStyle=hpf>.5?col('lime'):hpf>.25?col('gold'):col('red'); ctx.fillRect(e.x-w/2,e.y-R-11,w*hpf,4);
@@ -1804,19 +1809,22 @@ window.addEventListener('keydown',ev=>{
 // ---- Bestiary (monster guide) — collectible: black silhouettes until you kill one, then colour + name + desc ----
 function drawMonsterThumb(cvEl,type,revealed){
   const g=cvEl.getContext('2d'), W2=cvEl.width, H2=cvEl.height; g.clearRect(0,0,W2,H2);
-  const R=Math.min(W2,H2)*0.30, cx=W2/2, top=H2/2-R*0.12, sk=top+R*1.5;
-  const meta=ENEMY_TYPES[type], color=revealed?col(meta.color):'#181430';
-  g.save();
-  if(revealed){ g.shadowBlur=12; g.shadowColor=color; }
-  g.fillStyle=color; g.beginPath();
-  g.moveTo(cx-R,sk); g.lineTo(cx-R,top); g.arc(cx,top,R,Math.PI,2*Math.PI); g.lineTo(cx+R,sk);
-  const nn=4,w2=2*R/nn; for(let i=0;i<nn;i++){ g.lineTo(cx+R-(i+0.5)*w2,sk-R*0.32); g.lineTo(cx+R-(i+1)*w2,sk); }
-  g.closePath(); g.fill(); g.shadowBlur=0;
-  if(!revealed){ g.strokeStyle='#2c2750'; g.lineWidth=2; g.stroke();
-    g.fillStyle='#4a4470'; g.font='900 '+Math.round(R*1.15)+'px monospace'; g.textAlign='center'; g.textBaseline='middle'; g.fillText('?',cx,top+R*0.15); g.restore(); return; }
-  g.fillStyle='#fff'; g.beginPath(); g.arc(cx-R*0.4,top,R*0.3,0,6.283); g.arc(cx+R*0.4,top,R*0.3,0,6.283); g.fill();
-  g.fillStyle=meta.boss?'#3a0a2a':(meta.exploder?'#ff2436':'#12203a'); g.beginPath(); g.arc(cx-R*0.4,top,R*0.14,0,6.283); g.arc(cx+R*0.4,top,R*0.14,0,6.283); g.fill();
-  g.restore();
+  if(!revealed){   // black silhouette + "?" until you've killed one
+    const R=Math.min(W2,H2)*0.30, cx=W2/2, top=H2/2-R*0.12, sk=top+R*1.5;
+    g.fillStyle='#181430'; g.beginPath();
+    g.moveTo(cx-R,sk); g.lineTo(cx-R,top); g.arc(cx,top,R,Math.PI,2*Math.PI); g.lineTo(cx+R,sk);
+    const nn=4,w2=2*R/nn; for(let i=0;i<nn;i++){ g.lineTo(cx+R-(i+0.5)*w2,sk-R*0.32); g.lineTo(cx+R-(i+1)*w2,sk); }
+    g.closePath(); g.fill(); g.strokeStyle='#2c2750'; g.lineWidth=2; g.stroke();
+    g.fillStyle='#4a4470'; g.font='900 '+Math.round(R*1.15)+'px monospace'; g.textAlign='center'; g.textBaseline='middle'; g.fillText('?',cx,top+R*0.15);
+    return;
+  }
+  // revealed → draw the REAL in-game sprite by retargeting the enemy-draw code at this thumbnail context
+  const meta=ENEMY_TYPES[type];
+  const e={ type, x:W2/2, y:H2/2+3, r:(type==='boss'?21:19), hp:100, maxhp:100, flash:0, color:col(meta.color),
+    boss:!!meta.boss, exploder:!!meta.exploder, froster:!!meta.froster, jolt:!!meta.jolt, hex:!!meta.hex,
+    lane:0, wp:1, traveled:0, explodeAt:1, exploded:true, slowUntil:0, holdUntil:0, dot:0, thumb:true };
+  const prev=ctx; ctx=g;
+  try{ drawEnemy(e); } finally { ctx=prev; }
 }
 function renderBestiary(){
   const el=document.getElementById('guideInner');
