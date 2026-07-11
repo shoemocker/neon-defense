@@ -430,11 +430,12 @@ const col = n => (n && n[0]==='#') ? n : (_colCache[n] || (_colCache[n]=CSS.getP
 // ---- World & lanes — a LARGE FIXED arena; a new stream is added per boss (up to a cap) so it never gets so
 // dense you can't build. Lanes enter/exit from ANY of the four edges (L→R, R→L, T→B, B→T) for variety. ----
 const center = (c,r)=>({x:c*TILE+TILE/2, y:r*TILE+TILE/2});
-const ARENA_C=30, ARENA_R0=16;   // fixed size (~16:9). All four edges are stable → stored paths never break.
-const MAX_LANES=6;               // cap streams so the board stays buildable
+const ARENA_C0=24, ARENA_R00=14;   // BASE arena — GROWS +3col/+2row per lane so the map zooms out as bosses add streams
+const MAX_LANES=6;
 const LANE_COLORS=['cyan','gold','lime','mag','orange','purple','red','ice'];
 const DIRS=['LR','RL','TB','BT'];
-let lanes=[], roadSet=new Set(), worldCols=ARENA_C, worldRows=ARENA_R0;
+let lanes=[], roadSet=new Set(), worldCols=ARENA_C0, worldRows=ARENA_R00;
+function arenaSize(n){ return { cols: ARENA_C0 + Math.max(0,n-1)*5, rows: ARENA_R00 + Math.max(0,n-1)*3 }; }
 function segLen(a,b){ const p=center(a[0],a[1]),q=center(b[0],b[1]); return Math.hypot(q.x-p.x,q.y-p.y); }
 function wpLen(wp){ let len=0; for(let k=0;k<wp.length-1;k++)len+=segLen(wp[k],wp[k+1]); return len; }
 function roadTilesOf(wp){ const set=new Set();
@@ -445,7 +446,7 @@ function roadTilesOf(wp){ const set=new Set();
 function genSerp(cols, rows, dir){
   const horiz = dir==='LR'||dir==='RL', P = horiz?cols:rows, S = horiz?rows:cols, fwd = dir==='LR'||dir==='TB';
   let s = 1 + Math.floor(Math.random()*(S-2));
-  const jn = 3 + Math.floor(Math.random()*3);            // 3..5 jogs (min 3 → no near-straight short lanes)
+  const jn = 4 + Math.floor(Math.random()*4);            // 4..7 jogs — windier so paths reach the min length
   const jset=new Set(); while(jset.size<jn && jset.size<Math.max(1,P-4)){ jset.add(2+Math.floor(Math.random()*Math.max(1,P-4))); }
   const jogP=[...jset].sort((a,b)=>a-b);
   const prim=[[0,s]]; let x=0;
@@ -455,31 +456,58 @@ function genSerp(cols, rows, dir){
   prim.push([P-1,s]);
   return prim.map(([p,sc])=>{ const pp = fwd ? p : (P-1-p); return horiz ? [pp,sc] : [sc,pp]; });   // → [col,row]
 }
-// Retry until we get a path that avoids every tower AND is long enough; keep the longest seen as fallback.
-function genLaneWP(cols, rows, avoid, dir){
-  const P = (dir==='LR'||dir==='RL')?cols:rows, minLen = P*TILE*1.15;
-  let bestClear=null,bestClearLen=-1,best=null,bestLen=-1;
-  for(let a=0;a<80;a++){ const wp=genSerp(cols,rows,dir), len=wpLen(wp);
-    let clear=true; for(const k of roadTilesOf(wp)){ if(avoid.has(k)){ clear=false; break; } }
-    if(clear && len>=minLen) return wp;
-    if(clear && len>bestClearLen){ bestClearLen=len; bestClear=wp; }
-    if(len>bestLen){ bestLen=len; best=wp; }
-  }
-  return bestClear || best;
+const _hasRoad=(road,c,r)=>road.has(c+','+r);
+// 2x2 all-road squares touching the candidate = a 2-wide band (acceptable but not ideal).
+function count2x2(tiles, road){ let n=0;
+  for(const key of tiles){ const [c,r]=key.split(',').map(Number);
+    for(let dc=-1;dc<=0;dc++)for(let dr=-1;dr<=0;dr++){ const c0=c+dc,r0=r+dr;
+      if(_hasRoad(road,c0,r0)&&_hasRoad(road,c0+1,r0)&&_hasRoad(road,c0,r0+1)&&_hasRoad(road,c0+1,r0+1)) n++; } }
+  return n; }
+// 3-wide bands (3x2 or 2x3 all-road rectangles) touching the candidate — THESE must never happen.
+function count3wide(tiles, road){ let n=0;
+  for(const key of tiles){ const [c,r]=key.split(',').map(Number);
+    for(let dc=-2;dc<=0;dc++)for(let dr=-1;dr<=0;dr++){ let all=true;   // 3 wide × 2 tall
+      for(let a=0;a<3&&all;a++)for(let bb=0;bb<2&&all;bb++) if(!_hasRoad(road,c+dc+a,r+dr+bb)) all=false; if(all)n++; }
+    for(let dc=-1;dc<=0;dc++)for(let dr=-2;dr<=0;dr++){ let all=true;   // 2 wide × 3 tall
+      for(let a=0;a<2&&all;a++)for(let bb=0;bb<3&&all;bb++) if(!_hasRoad(road,c+dc+a,r+dr+bb)) all=false; if(all)n++; } }
+  return n; }
+// minimum lane length — scales UP each boss so paths stay long & fair (based on the bigger arena dimension)
+function laneMinLen(n){ const sz=arenaSize(n); return Math.max(sz.cols,sz.rows)*TILE*(1.05 + 0.09*Math.max(0,n-1)); }
+// Generate a lane: avoids towers, adds NO thick (2x2) band vs existing roads, and meets the min length. Scores
+// candidates and keeps the best if none are perfect.
+function genLaneClean(cols, rows, avoidTowers, existingRoad, dir, minLen){
+  let best=null, bestScore=Infinity;
+  for(let a=0;a<340;a++){ const wp=genSerp(cols,rows,dir), tiles=roadTilesOf(wp);
+    let towerHits=0; for(const k of tiles){ if(avoidTowers.has(k)) towerHits++; }
+    const combined=new Set(existingRoad); for(const k of tiles) combined.add(k);
+    const w3=count3wide(tiles, combined), w2=count2x2(tiles, combined), shortfall=Math.max(0, minLen-wpLen(wp));
+    // priority: never on a tower ≫ never 3-wide ≫ few 2-wide ≫ reach the min length
+    const score = towerHits*1e9 + w3*1e6 + w2*900 + shortfall;
+    if(score===0) return wp;
+    if(score<bestScore){ bestScore=score; best=wp; } }
+  return best;
 }
-function relayout(){   // fixed arena — just rebuild the road set from the stored lane paths (no resizing)
-  worldCols=ARENA_C; worldRows=ARENA_R0;
-  roadSet=new Set();
+function relayout(){   // set the (grown) arena size + rebuild the road set from the lane paths
+  const sz=arenaSize(lanes.length); worldCols=sz.cols; worldRows=sz.rows; roadSet=new Set();
   for(const ln of lanes){ for(let i=0;i<ln.wp.length-1;i++){
     let [c0,r0]=ln.wp[i],[c1,r1]=ln.wp[i+1]; const dc=Math.sign(c1-c0),dr=Math.sign(r1-r0);
     let c=c0,r=r0; roadSet.add(c+','+r);
     while(c!==c1||r!==r1){ c+=dc; r+=dr; roadSet.add(c+','+r); } } }
 }
+// Regenerate ALL lanes for the current count (the arena has grown) — clean, non-thick, min-length paths.
+function regenLanes(){
+  const n=lanes.length, sz=arenaSize(n); worldCols=sz.cols; worldRows=sz.rows;
+  const avoidTowers=new Set(Object.keys(occupancy)), road=new Set(), minLen=laneMinLen(n);
+  for(let i=0;i<n;i++){ const dir=lanes[i].dir||DIRS[i%4];
+    const wp=genLaneClean(worldCols, worldRows, avoidTowers, road, dir, minLen);
+    lanes[i].wp=wp; lanes[i].len=wpLen(wp); lanes[i].color=LANE_COLORS[i%LANE_COLORS.length];
+    for(const k of roadTilesOf(wp)) road.add(k); }
+  relayout(); relocateTowersOffRoads();
+}
 function addLane(){ const i=lanes.length;
   const dir = i===0 ? 'LR' : DIRS[Math.floor(Math.random()*DIRS.length)];   // first stream L→R (classic), rest vary
-  const avoid=new Set(Object.keys(occupancy));         // every tower tile is off-limits to the new path
-  const wp=genLaneWP(worldCols, worldRows, avoid, dir);
-  lanes.push({wp, len:wpLen(wp), color:LANE_COLORS[i%LANE_COLORS.length], dir});
+  lanes.push({dir, wp:[[0,1],[1,1]], len:1, color:LANE_COLORS[i%LANE_COLORS.length]});
+  regenLanes();   // rebuild every lane for the newly-grown arena
 }
 // A path must NEVER sit on a tower. After a relayout shifts the roads, bump any now-buried tower to the
 // nearest free (non-road, in-bounds, unoccupied) tile so no tower is ever under a lane.
@@ -507,12 +535,12 @@ const buildable=(c,r)=>c>=0&&c<worldCols&&r>=0&&r<worldRows&&!isRoad(c,r);
 let viewScale=1, camOffx=0, camOffy=0;
 const PAD=1;   // always keep a 1-tile border ring of blocks around the arena (so edge towers' arrows aren't clipped)
 function fitScale(){ return Math.min(W/((worldCols+2*PAD)*TILE), H/((worldRows+2*PAD)*TILE)); }
-function updateCam(dt){ const tgt=fitScale(); viewScale+=(tgt-viewScale)*Math.min(1,dt*1.5);   // gentle, cinematic zoom
+function updateCam(dt){ const tgt=fitScale(); viewScale+=(tgt-viewScale)*Math.min(1,dt*0.9);   // slow, cinematic zoom-out as the map grows
   camOffx=(W-worldCols*TILE*viewScale)/2; camOffy=(H-worldRows*TILE*viewScale)/2; }
 function screenToWorld(px,py){ return {x:(px-camOffx)/viewScale, y:(py-camOffy)/viewScale}; }
-function expandMap(){                              // boss cleared — weave in a new stream from a random edge (up to the cap)
-  if(lanes.length>=MAX_LANES) return;             // arena is fixed-size — stop adding so it stays buildable
-  addLane(); relayout(); relocateTowersOffRoads();   // a new lane may cross a tower tile → bump it to safety
+function expandMap(){                              // boss cleared — grow the arena + weave in a new stream
+  if(lanes.length>=MAX_LANES) return;
+  addLane();   // grows the arena (arenaSize) + regenerates every lane clean; the camera eases → slow zoom-out
   texts.push({x:worldCols*TILE/2,y:worldRows*TILE/2,txt:'▣ NEW STREAM — '+lanes.length+' LANES',color:col('cyan'),life:2.4,vy:-14,sz:26});
 }
 // Boss-reward unlocks — each boss (waves 5/10/15/20/25) hands you a new ability, then it's endless.
