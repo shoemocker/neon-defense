@@ -171,6 +171,7 @@
   .strow .sbar{position:absolute;left:0;top:0;bottom:0;z-index:0;border-radius:7px}
   .strow .sname,.strow .sval{position:relative;z-index:1}
   .strow .sname{font-weight:700;white-space:nowrap}
+  .ticon{width:17px;height:17px;vertical-align:middle;margin-right:2px}
   .strow .sval{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
   .haste{position:relative;overflow:hidden;width:auto!important;padding:9px 20px!important;white-space:nowrap;
     border-radius:10px;font-weight:900;letter-spacing:1px;
@@ -1591,7 +1592,7 @@ function drawRadial(){
     ctx.globalAlpha=afford?1:.32;                                  // can't afford → dim + (radialPick blocks selecting it)
     ctx.fillStyle='#141126'; ctx.beginPath(); ctx.arc(bub.x,bub.y,hot?21:18,0,6.283); ctx.fill();
     ctx.strokeStyle=c; ctx.lineWidth=hot?3:2.4; ctx.shadowBlur=afford?(hot?16:9):0; ctx.shadowColor=c; ctx.stroke(); ctx.shadowBlur=0;
-    ctx.font='18px "Courier New",monospace'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(b.icon,bub.x,bub.y+1);
+    ctx.save(); ctx.translate(bub.x,bub.y); drawTowerBody(bub.type, hot?12:11, c, -Math.PI/4); ctx.restore();   // real tower art
     ctx.globalAlpha=1;
     const d=byType[bub.type];   // hotkey badge on the bubble
     if(d){ ctx.fillStyle=col('cyan'); ctx.beginPath(); ctx.arc(bub.x+15,bub.y-15,8,0,6.283); ctx.fill();
@@ -1692,7 +1693,7 @@ function renderStats(){
     const dps=(timeOf(t)>0.3)?(dmgOf(t)/timeOf(t)):0, pct=Math.round(dmgOf(t)/max*100);
     const frozen = (t.thawUntil||0)>now();
     return `<div class="strow clk" data-id="${t.id}"${frozen?' style="outline:1px solid '+col('ice')+'"':''}><span class="sbar" style="width:${pct}%;background:${col(b.color)}22"></span>`
-      +`<span class="sname" style="color:${col(b.color)}">${frozen?'❄ ':''}${b.icon} ${b.name} <span style="color:var(--faint)">L${t.level}</span></span>`
+      +`<span class="sname" style="color:${col(b.color)}">${frozen?'❄ ':''}<img class="ticon" src="${towerIconURL(t.type)}">${b.name} <span style="color:var(--faint)">L${t.level}</span></span>`
       +`<span class="sval">${Math.round(dmgOf(t)).toLocaleString()} · <b style="color:var(--ink)">${dps.toFixed(0)}/s</b></span></div>`;
   }).join('');
   el.innerHTML=rows;
@@ -1990,6 +1991,11 @@ function drawTowerThumb(cvEl,type){
   const prev=ctx; ctx=g; g.save(); g.translate(W2/2,H2/2+1); g.shadowBlur=8; g.shadowColor=c;
   try{ drawTowerBody(type, sz, c, -Math.PI/4); } finally { g.restore(); ctx=prev; }
 }
+// cached tiny tower-art icons (data URLs) for HTML text lists like the DPS panel — generated once per type
+const _towerIcon={};
+function towerIconURL(type){ if(_towerIcon[type])return _towerIcon[type];
+  const cv2=document.createElement('canvas'); cv2.width=30; cv2.height=30; drawTowerThumb(cv2,type);
+  return _towerIcon[type]=cv2.toDataURL(); }
 function renderTowerGuide(){
   const el=document.getElementById('towerGuideInner');
   const entries=Object.entries(TOWER_TYPES);
