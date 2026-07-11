@@ -116,6 +116,21 @@
   .tbtn{font-family:inherit;font-size:14px;font-weight:700;padding:9px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--muted);cursor:pointer;transition:.1s}
   .tbtn:hover{border-color:var(--muted)}
   .tbtn.on{background:linear-gradient(90deg,#2a2450,#3a2f6e);border-color:var(--cyan);color:var(--ink);box-shadow:0 0 12px rgba(51,230,255,.3)}
+  /* per-tower attack-mode selector inside the selected-tower card */
+  .tmini{display:flex;gap:4px;margin-top:9px;flex-wrap:wrap}
+  .tmini .mb{flex:1 1 auto;font-family:inherit;font-size:11.5px;font-weight:700;padding:5px 4px;border:1px solid var(--line);border-radius:6px;background:var(--panel2);color:var(--muted);cursor:pointer;transition:.1s;white-space:nowrap}
+  .tmini .mb:hover{border-color:var(--muted)}
+  .tmini .mb.on{border-color:var(--cyan);color:var(--ink);background:linear-gradient(90deg,#2a2450,#3a2f6e);box-shadow:0 0 8px rgba(51,230,255,.3)}
+  /* Round / Overall tabs on the DPS card */
+  .dpstabs{display:flex;gap:5px;margin:-2px 0 7px}
+  .dpstabs .dt{flex:1;font-family:inherit;font-size:12px;font-weight:700;letter-spacing:.5px;padding:5px 4px;border:1px solid var(--line);border-radius:7px;background:var(--panel2);color:var(--muted);cursor:pointer;transition:.1s}
+  .dpstabs .dt:hover{border-color:var(--muted)}
+  .dpstabs .dt.on{border-color:var(--mag);color:var(--ink);background:linear-gradient(90deg,#2a2450,#3a2f6e);box-shadow:0 0 8px rgba(255,59,212,.3)}
+  .strow.clk{cursor:pointer}
+  .strow.clk:hover{outline:1px solid var(--cyan)}
+  .pausebtn{cursor:pointer;transition:.1s}
+  .pausebtn:hover{border-color:var(--muted)}
+  .pausebtn.on{border-color:var(--gold);box-shadow:0 0 10px rgba(255,207,58,.35)}
   .strow{position:relative;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 10px;margin:5px 0;border-radius:7px;background:var(--panel2);font-size:14px;overflow:hidden}
   .strow .sbar{position:absolute;left:0;top:0;bottom:0;z-index:0;border-radius:7px}
   .strow .sname,.strow .sval{position:relative;z-index:1}
@@ -206,6 +221,7 @@
       <div class="stat speedbox">⏩ <div class="speedctl" id="speedctl">
         <button class="sb" data-s="0">50</button><button class="sb" data-s="1">100</button><button class="sb" data-s="2">150</button><button class="sb" data-s="3">200</button><button class="sb" data-s="4">250</button>
       </div></div>
+      <div class="stat pausebtn" id="pauseBtn" title="Pause / resume  ·  [P]">⏸ <b style="font-size:15px">PAUSE</b></div>
       <div class="stat wave">🌊 WAVE <b id="wave">0</b></div>
       <div class="stat" style="color:var(--muted)">💀 <b id="kills" style="color:var(--ink)">0</b></div>
       <div class="stat coins">🪙 <b id="coins">0</b></div>
@@ -240,6 +256,10 @@
     </div>
     <div class="card" id="statsCard">
       <h2>📊 Tower DPS — live</h2>
+      <div class="dpstabs" id="dpstabs">
+        <button class="dt on" data-mode="round">THIS ROUND</button>
+        <button class="dt" data-mode="overall">OVERALL</button>
+      </div>
       <div id="statsBody"><span class="hint">Place towers to see live damage &amp; DPS.</span></div>
     </div>
   </div>
@@ -253,7 +273,10 @@
 // ---------------------------------------------------------------------------
 const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
 const W = cv.width, H = cv.height, TILE = 60, COLS = W/TILE, ROWS = H/TILE;
-const now = () => performance.now()/1000;
+// now() is a PAUSE-AWARE clock — it stops advancing while the game is paused, so every timer/animation
+// (ability durations, freezes, pulses) freezes with it. Real wall-time paused is banked in pausedAccum.
+let paused=false, pausedAccum=0, pauseStart=0;
+const now = () => (paused ? pauseStart : performance.now()/1000) - pausedAccum;
 const rand = (a,b)=>a+Math.random()*(b-a);
 const dist = (ax,ay,bx,by)=>Math.hypot(ax-bx,ay-by);
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
@@ -356,7 +379,8 @@ function expandMap(){                              // called when a boss wave cl
   if(lanes.length>=3 && !revealUnlocked) unlockReveal();   // beating the 2nd boss (3rd lane) reveals the map tool
 }
 function unlockReveal(){
-  revealUnlocked=true; const rb=document.getElementById('revealBtn'); rb.style.display='';
+  revealUnlocked=true; revealMark=kills-REVEAL_KILLS;   // ready to fire the moment it unlocks
+  const rb=document.getElementById('revealBtn'); rb.style.display='';
   if(rb.animate) rb.animate([{opacity:0,transform:'scale(.4) translateY(6px)'},
     {opacity:1,transform:'scale(1.15)',offset:.6},{transform:'scale(1)'}],{duration:640,easing:'ease-out'});
   texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.14,txt:'🗺 REVEAL PATH UNLOCKED',color:col('gold'),life:2.4,vy:-14,sz:24});
@@ -365,7 +389,7 @@ function unlockReveal(){
 
 // ---- Tower catalogue ----
 const TOWER_TYPES = {
-  cannon:  {name:'Cannon', icon:'💥', color:'orange', cost:80,  dmg:34, rate:0.85, range:150, crit:.03, critMult:2.0, splash:52, pspeed:520, hp:160, desc:'Lobs shells. AoE — blows clusters up. Tanky.'},
+  cannon:  {name:'Cannon', icon:'💥', color:'orange', cost:80,  dmg:44, rate:0.92, range:155, crit:.03, critMult:2.0, splash:82, pspeed:560, hp:160, tough:1, desc:'Lobs shells. Big AoE — wrecks whole clusters. Tanky.'},
   gatling: {name:'Gatling',icon:'🔫', color:'cyan',   cost:65,  dmg:8,  rate:6.5,  range:135, crit:.06, critMult:2.2, splash:0,  pspeed:900, hp:70,  desc:'Rapid fire. Shreds single targets. Fragile.'},
   frost:   {name:'Frost',  icon:'❄️', color:'ice',    cost:70,  dmg:6,  rate:1.6,  range:140, crit:.02, critMult:1.5, splash:0,  pspeed:700, hp:90,  slow:.45, slowT:1.8, desc:'Chills enemies — slows them way down.'},
   poison:  {name:'Venom',  icon:'☠️', color:'lime',   cost:75,  dmg:5,  rate:1.3,  range:145, crit:.02, critMult:1.5, splash:0,  pspeed:640, hp:90,  dot:16, dotT:3.2, desc:'Injects poison — damage over time, stacks.'},
@@ -373,8 +397,11 @@ const TOWER_TYPES = {
   bomb:    {name:'Demolition',icon:'🧨',color:'orange',cost:130,dmg:0,  rate:0.0333,range:175,crit:0, critMult:1, hp:100, pspeed:470, bombDmg:800, bombR:118, fuse:5, bossUnlock:true, desc:'Lobs a lit dynamite — massive blast after 5s. 30s cd. Unlocks after your 1st boss.'},
   psyche:  {name:'Psyche', icon:'🔮', color:'mag',    cost:90,  dmg:0,  rate:0.1,  range:135, crit:0,  critMult:1, hp:80,  hold:3,  bossCost:1, bossUnlock:true, explosionImmune:true, desc:'Telekinetic hold — freezes enemies 3s (bosses resist 10s). Can\'t be destroyed by blasts (can still be frozen). Costs 💠 boss credits.'},
 };
-const maxHp = t => Math.round(TOWER_TYPES[t.type].hp * Math.pow(1.18, t.level-1));   // grows with level
-const PHANTOM_DMG = 120;   // a Phantom blast deals this to every tower it touches (invest in HP/level to survive)
+const PHANTOM_DMG = 120;   // a Phantom blast deals EXACTLY this to every tower it touches
+// Tower HP is tuned so "Phantom hits to kill" == tower LEVEL (+ a tough bonus for tanky types like Cannon).
+// A Phantom hit does PHANTOM_DMG, so level×PHANTOM_DMG HP dies on the level-th hit → upgrade = survivability.
+const hitsToKill = t => t.level + (TOWER_TYPES[t.type].tough||0);
+const maxHp = t => PHANTOM_DMG * hitsToKill(t);
 const ENEMY_TYPES = {
   grunt: {name:'Grunt', color:'red',    hp:60,  speed:62, r:13, reward:6,  leak:1},
   fast:  {name:'Runner',color:'gold',   hp:38,  speed:112,r:11, reward:7,  leak:1},
@@ -399,15 +426,20 @@ const BUFF_POOL = [
 // ---- Game state ----
 let coins, lives, wave, kills, bossCoins, towers, enemies, projs, beams, parts, texts, bombs;
 let gb, occupancy, build, selected, state, spawnQueue, spawnT, shake, hoverCell, waveActive, countdown, introT, statsTimer, armed, bossTowersUnlocked;
-let targetMode='close';   // close | far | strong | weak — applies to ALL towers
+let targetMode='close';   // close | far | strong | weak — the DEFAULT; a tower with its own .mode overrides it
+let hlTower=null;         // tower highlighted by hovering its DPS-panel row
+let towerId=0;            // stable per-tower id so DPS rows can point back at a tower
+let statsMode='round';    // 'round' (this wave only) | 'overall' (lifetime) — towers explode & lose overall damage
 let pendingBuff=null;     // buff chosen at boss spawn; claimed only if you kill the boss
 let hpMult=1, curDiff=null, introGuy=null;   // curDiff = chosen HP/coins; introGuy = the boss-intro character (cycles)
-let hasteUntil=0, hasteReadyAt=0;   // Overdrive: +atk speed for 30s on a 5-min cooldown (real seconds)
-const HASTE_DUR=30, HASTE_CD=300, HASTE_MULT=1.6;
-let phantomUnlocked=false, phantomUntil=0, phantomReadyAt=0;   // Phantom Hunt: appears once a Phantom kills a tower
-const PHUNT_DUR=10, PHUNT_CD=60;    // 10s of towers targeting ONLY Phantoms, 60s cooldown
-let revealUnlocked=false, revealUntil=0, revealReadyAt=0;     // Reveal Path: unlocks after the 2nd boss (3rd lane)
-const REVEAL_DUR=10, REVEAL_CD=300; // shows the ghost routes for 10s, 5-min cooldown
+// Abilities RECHARGE BY KILLS, not wall-clock — so you can't wait out a cooldown on the reward screen,
+// and they naturally come back faster at higher game speed (you kill faster). hasteMark = kills at last use.
+let hasteUntil=0, hasteMark=0;      // Overdrive: +atk speed for its duration; costs HASTE_KILLS kills to recharge
+const HASTE_DUR=30, HASTE_KILLS=35, HASTE_MULT=1.6;
+let phantomUnlocked=false, phantomUntil=0, phantomMark=0;   // Phantom Hunt: appears once a Phantom kills a tower
+const PHUNT_DUR=10, PHUNT_KILLS=15;    // 10s of towers targeting ONLY Phantoms; recharge = 15 kills
+let revealUnlocked=false, revealUntil=0, revealMark=0;     // Reveal Path: unlocks after the 2nd boss (3rd lane)
+const REVEAL_DUR=10, REVEAL_KILLS=25; // shows the ghost routes for 10s; recharge = 25 kills
 // Duke-Nukem-style difficulty: ghost HP mult + starting coins + a trash-talking intro guy per tier
 const DIFFS=[
   {name:'Piece of Cake', hp:1.0, coins:200, guy:'baby',  cry:'NAP TIME, BABY?',  c1:'#ff9ecb'},
@@ -423,9 +455,10 @@ function reset(){
   occupancy={}; build=null; selected=null; state='ready'; pendingBuff=null;
   spawnQueue=[]; spawnT=0; shake=0; hoverCell=null; waveActive=false; countdown=GAP_BOSS; introT=0; statsTimer=0; armed=false;
   lanes=[]; addLane(); relayout(); viewScale=fitScale(); updateCam(1);
-  hasteUntil=0; hasteReadyAt=0;
-  phantomUnlocked=false; phantomUntil=0; phantomReadyAt=0;
-  revealUnlocked=false; revealUntil=0; revealReadyAt=0;
+  hasteUntil=0; hasteMark=-HASTE_KILLS;   // start with Overdrive charged; then it costs kills to recharge
+  phantomUnlocked=false; phantomUntil=0; phantomMark=0;
+  revealUnlocked=false; revealUntil=0; revealMark=0;
+  hlTower=null; if(paused)togglePause();   // clear any pause on a fresh game
   const pb=document.getElementById('phantomBtn'); if(pb)pb.style.display='none';
   const rb=document.getElementById('revealBtn'); if(rb)rb.style.display='none';
   syncUI(); buildShop(); refreshWaveBtn(); updateHasteBtn(); showIntro();
@@ -454,6 +487,7 @@ const sellVal = t => { let v=TOWER_TYPES[t.type].cost; for(let i=1;i<t.level;i++
 function startWave(){
   if(waveActive) return;
   wave++; waveActive=true; state='playing';
+  for(const t of towers){ t.dmgRound=0; t.roundTime=0; }   // fresh "this round" DPS tally each wave
   const boss = wave%5===0;
   spawnQueue=[];
   const n = 6 + wave*2;
@@ -526,10 +560,11 @@ function fire(t){
     if(!heldAny) return false;                // only immune bosses in range → don't waste the cooldown
     psychePulse(t); sfx('psyche'); return true;
   }
-  // target selection per the global attack mode (all towers obey it)
+  // target selection — a tower's OWN mode (t.mode) wins; otherwise it follows the global attack mode
+  const mode = t.mode || targetMode;
   let tgt=null, best=null;
   for(const e of enemies){ if(e.hp<=0) continue; if(phantomOnly && !e.exploder) continue; const d=dist(t.x,t.y,e.x,e.y); if(d>s.range) continue;
-    let sc; if(targetMode==='close') sc=-d; else if(targetMode==='far') sc=d; else if(targetMode==='strong') sc=e.hp; else sc=-e.hp;
+    let sc; if(mode==='close') sc=-d; else if(mode==='far') sc=d; else if(mode==='strong') sc=e.hp; else sc=-e.hp;
     if(best===null || sc>best){ best=sc; tgt=e; } }
   if(!tgt) return false;
   t.angle=Math.atan2(tgt.y-t.y, tgt.x-t.x);
@@ -567,7 +602,7 @@ function projImpact(p){
   if(s.splash>0){
     explosion(p.x,p.y,s.splash,col(b.color)); shake=Math.max(shake,3); sfx('boom');
     for(const e of enemies){ if(e.hp<=0)continue; if(dist(p.x,p.y,e.x,e.y)<=s.splash){
-      const fall = 1-0.4*(dist(p.x,p.y,e.x,e.y)/s.splash);
+      const fall = 1-0.25*(dist(p.x,p.y,e.x,e.y)/s.splash);   // gentle falloff — edge of the blast still hits hard
       damage(e, dmg.v*fall, dmg.crit && e===p.tgt, p); }}
   } else {
     const e=p.tgt;
@@ -586,7 +621,8 @@ function damage(e,amt,crit,src){
   let res=false;
   if(st && st===e.resist){ amt*=RESIST; res=true; crit=false; }
   const tw = src ? (src.owner || (src.level!==undefined?src:null)) : null;   // the tower that dealt it
-  if(tw){ tw.dmgTotal=(tw.dmgTotal||0)+Math.min(amt, Math.max(0,e.hp));      // count real (non-overkill) damage
+  if(tw){ const real=Math.min(amt, Math.max(0,e.hp));                        // count real (non-overkill) damage
+    tw.dmgTotal=(tw.dmgTotal||0)+real; tw.dmgRound=(tw.dmgRound||0)+real;    // lifetime + this-round tallies
     if(crit) tw.shakeT=Math.max(tw.shakeT||0, 0.18); }                       // a crit jolts ITS tower, not the map
   e.hp-=amt; e.flash=0.09;
   texts.push({x:e.x+rand(-6,6),y:e.y-e.r-4,txt:Math.round(amt)+(res?'🛡':''),
@@ -696,7 +732,7 @@ function hexWeaken(e){
   if(inRange.length) texts.push({x:e.x,y:e.y-e.r-6,txt:'✖ '+inRange.length+' WEAKENED',color:col('mag'),life:1.6,vy:-22,sz:16});
 }
 function unlockPhantomHunt(){
-  phantomUnlocked=true;
+  phantomUnlocked=true; phantomMark=kills-PHUNT_KILLS;   // ready to fire the moment it unlocks
   const pb=document.getElementById('phantomBtn'); pb.style.display='';
   if(pb.animate) pb.animate([{opacity:0,transform:'scale(.4) translateY(6px)',filter:'blur(3px)'},
     {opacity:1,transform:'scale(1.15)',offset:.6,filter:'blur(0)'},{transform:'scale(1)'}],{duration:640,easing:'ease-out'});
@@ -738,7 +774,7 @@ function update(dt){
   for(const e of enemies){
     if(e.hp<=0)continue;
     if(e.flash>0)e.flash-=g;
-    if(e.dotUntil>now() && e.dot>0){ const d=e.dot*g; if(e.dotOwner&&e.hp>0)e.dotOwner.dmgTotal=(e.dotOwner.dmgTotal||0)+Math.min(d,e.hp); e.hp-=d; if(Math.random()<g*8)parts.push({x:e.x+rand(-e.r,e.r),y:e.y+rand(-e.r,e.r),vx:0,vy:-30,life:.4,max:.4,c:col('lime'),sz:2,g:-10}); if(e.hp<=0){killEnemy(e,null);continue;} }
+    if(e.dotUntil>now() && e.dot>0){ const d=e.dot*g; if(e.dotOwner&&e.hp>0){ const rd=Math.min(d,e.hp); e.dotOwner.dmgTotal=(e.dotOwner.dmgTotal||0)+rd; e.dotOwner.dmgRound=(e.dotOwner.dmgRound||0)+rd; } e.hp-=d; if(Math.random()<g*8)parts.push({x:e.x+rand(-e.r,e.r),y:e.y+rand(-e.r,e.r),vx:0,vy:-30,life:.4,max:.4,c:col('lime'),sz:2,g:-10}); if(e.hp<=0){killEnemy(e,null);continue;} }
     const lane=lanes[e.lane]||lanes[0];
     if(e.exploder && !e.exploded && e.traveled >= e.explodeAt*lane.len){ exploderExplode(e); e.exploded=true; }
     if(e.froster && !e.exploded && e.traveled >= e.explodeAt*lane.len){ frosterFreeze(e); e.exploded=true; }
@@ -754,7 +790,7 @@ function update(dt){
   }
   enemies=enemies.filter(e=>e.hp>0);
   // towers
-  for(const t of towers){ t.combatTime=(t.combatTime||0)+dt; if(t.shakeT>0)t.shakeT-=g;
+  for(const t of towers){ t.combatTime=(t.combatTime||0)+dt; if(waveActive)t.roundTime=(t.roundTime||0)+dt; if(t.shakeT>0)t.shakeT-=g;
     // frozen towers can't fire for 5s, then thaw back to full over 3s (ff ramps 0→1)
     let ff=1; const nn=now();
     if(t.frozenUntil && nn<t.frozenUntil) ff=0;
@@ -837,6 +873,12 @@ function render(){
   // selected range
   if(selected){ const s=stats(selected); ctx.strokeStyle=col(TOWER_TYPES[selected.type].color); ctx.globalAlpha=.55; ctx.lineWidth=2;
     ctx.beginPath(); ctx.arc(selected.x,selected.y,s.range,0,6.283); ctx.stroke(); ctx.globalAlpha=1; }
+  // DPS-panel hover highlight — a pulsing beacon around the pointed-at tower so you can find it on the board
+  if(hlTower && towers.includes(hlTower)){ const t=hlTower, pl=0.6+0.4*Math.abs(Math.sin(now()*6)), sz=16+t.level*2.4;
+    ctx.save(); ctx.strokeStyle=col('cyan'); ctx.globalAlpha=pl; ctx.lineWidth=3; ctx.shadowBlur=18; ctx.shadowColor=col('cyan');
+    ctx.beginPath(); ctx.arc(t.x,t.y,sz*0.7+10,0,6.283); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(t.x,t.y-sz-16); ctx.lineTo(t.x-7,t.y-sz-27); ctx.lineTo(t.x+7,t.y-sz-27); ctx.closePath(); ctx.fillStyle=col('cyan'); ctx.fill();
+    ctx.restore(); ctx.globalAlpha=1; }
   // reveal-path overlay (under units so the flowing arrows read behind the ghosts)
   if(now()<revealUntil) drawRevealPath();
   // towers
@@ -881,6 +923,12 @@ function render(){
     ctx.font='900 15px "Courier New",monospace'; ctx.fillText(bossNext?'☠ BOSS WAVE IN':'⏱ NEXT WAVE IN', W/2, 26);
     ctx.font='900 30px "Courier New",monospace'; ctx.fillStyle=col('gold'); ctx.fillText(n+'s', W/2, 54); ctx.globalAlpha=1; }
   if(state==='intro') drawIntroGuy();
+  if(paused){ ctx.save(); ctx.fillStyle='rgba(8,6,20,.62)'; ctx.fillRect(0,0,W,H);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle=col('gold'); ctx.shadowBlur=24; ctx.shadowColor=col('gold'); ctx.font='900 60px "Courier New",monospace';
+    ctx.fillText('⏸ PAUSED', W/2, H/2-8); ctx.shadowBlur=0;
+    ctx.fillStyle=col('muted'); ctx.font='900 18px "Courier New",monospace';
+    ctx.fillText('press  P  or the ⏸ button to resume', W/2, H/2+40); ctx.restore(); }
 }
 function drawIntroGuy(){
   const d=introGuy||DIFFS[0];
@@ -1194,16 +1242,23 @@ function renderSel(){
   document.getElementById('selCard').style.display='block';
   document.getElementById('selName').textContent=`${b.name}  ·  LV ${t.level}`;
   document.getElementById('selName').style.color=col(b.color);
+  const survives=Math.ceil(clamp(t.hp/PHANTOM_DMG,0,99));   // Phantom hits it can still take
   const rows=[['Damage',s.dmg.toFixed(0)],['Atk speed',s.rate.toFixed(2)+'/s'],
     ['Crit chance',(s.crit*100).toFixed(0)+'%'],['Crit dmg','×'+s.critMult.toFixed(1)],
-    ['Range',s.range.toFixed(0)],['Health',Math.round(t.hp)+' / '+Math.round(t.maxhp)]];
+    ['Range',s.range.toFixed(0)],['Health',Math.round(t.hp)+' / '+Math.round(t.maxhp)],
+    ['Phantom hits','🛡 '+survives]];
   if(s.splash)rows.push(['Splash',s.splash]);
   if(s.chain)rows.push(['Chains',s.chain]);
   if(b.slow)rows.push(['Slow','×'+b.slow]);
   if(b.dot)rows.push(['Poison',s.dot.toFixed(0)+'/s']);
   rows.push(['Dmg dealt', Math.round(t.dmgTotal||0).toLocaleString()]);
   if((t.combatTime||0)>0.3) rows.push(['DPS', (t.dmgTotal/t.combatTime).toFixed(1)]);
-  document.getElementById('selStats').innerHTML=rows.map(([k,v])=>`<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('');
+  const modes=[['auto','Auto'],['close','Near'],['far','Far'],['strong','Str'],['weak','Weak']];
+  const cur=t.mode||'auto';
+  const mini=`<div class="row" style="margin-top:6px"><span class="k">🎯 Targets</span><span class="v" style="color:var(--faint);font-size:12px">${cur==='auto'?'follows global':'this tower'}</span></div>`
+    +`<div class="tmini" id="towerMode">${modes.map(([m,l])=>`<button class="mb${cur===m?' on':''}" data-m="${m}">${l}</button>`).join('')}</div>`;
+  document.getElementById('selStats').innerHTML=rows.map(([k,v])=>`<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')+mini;
+  document.querySelectorAll('#towerMode .mb').forEach(el=>el.onclick=()=>{ selected.mode = el.dataset.m==='auto'?null:el.dataset.m; renderSel(); });
   const up=document.getElementById('upBtn'); const c=upCost(t);
   up.textContent=`UPGRADE 🪙${c}`; up.disabled=coins<c;
   document.getElementById('sellBtn').textContent = b.bossCost ? `SELL 💠${b.bossCost}` : `SELL 🪙${sellVal(t)}`;
@@ -1223,18 +1278,26 @@ function renderBuffs(){
 function renderStats(){
   const el=document.getElementById('statsBody');
   if(!towers.length){ el.innerHTML='<span class="hint">Place towers to see live damage &amp; DPS.</span>'; return; }
-  const all=[...towers].sort((a,b)=>(b.dmgTotal||0)-(a.dmgTotal||0));   // board grows/shrinks with your fleet, capped at 20 rows
+  const round=statsMode==='round';
+  const dmgOf=t=> (round?t.dmgRound:t.dmgTotal)||0;
+  const timeOf=t=> (round?t.roundTime:t.combatTime)||0;
+  const all=[...towers].sort((a,b)=>dmgOf(b)-dmgOf(a));   // board grows/shrinks with your fleet, capped at 20 rows
   const list=all.slice(0,20);
-  const max=Math.max(1,...list.map(t=>t.dmgTotal||0));
+  const max=Math.max(1,...list.map(dmgOf));
   let rows=list.map(t=>{ const b=TOWER_TYPES[t.type];
-    const dps=(t.combatTime>0.3)?(t.dmgTotal/t.combatTime):0, pct=Math.round((t.dmgTotal||0)/max*100);
+    const dps=(timeOf(t)>0.3)?(dmgOf(t)/timeOf(t)):0, pct=Math.round(dmgOf(t)/max*100);
     const frozen = (t.thawUntil||0)>now();
-    return `<div class="strow"${frozen?' style="outline:1px solid '+col('ice')+'"':''}><span class="sbar" style="width:${pct}%;background:${col(b.color)}22"></span>`
+    return `<div class="strow clk" data-id="${t.id}"${frozen?' style="outline:1px solid '+col('ice')+'"':''}><span class="sbar" style="width:${pct}%;background:${col(b.color)}22"></span>`
       +`<span class="sname" style="color:${col(b.color)}">${frozen?'❄ ':''}${b.icon} ${b.name} <span style="color:var(--faint)">L${t.level}</span></span>`
-      +`<span class="sval">${Math.round(t.dmgTotal||0).toLocaleString()} · <b style="color:var(--ink)">${dps.toFixed(0)}/s</b></span></div>`;
+      +`<span class="sval">${Math.round(dmgOf(t)).toLocaleString()} · <b style="color:var(--ink)">${dps.toFixed(0)}/s</b></span></div>`;
   }).join('');
   if(all.length>20) rows+=`<div class="strow" style="justify-content:center;color:var(--faint);background:transparent">+ ${all.length-20} more towers</div>`;
   el.innerHTML=rows;
+  // click a row → select that tower; hover → beacon it on the board
+  el.querySelectorAll('.strow.clk').forEach(row=>{ const t=towers.find(x=>x.id===+row.dataset.id); if(!t)return;
+    row.onclick=()=>{ selected=t; build=null; refreshShopSel(); renderSel(); };
+    row.onmouseenter=()=>hlTower=t; row.onmouseleave=()=>{ if(hlTower===t)hlTower=null; };
+  });
 }
 function refreshTargetBtns(){ document.querySelectorAll('.tbtn').forEach(b=>b.classList.toggle('on',b.dataset.m===targetMode)); }
 function refreshWaveBtn(){ const b=document.getElementById('waveBtn');
@@ -1278,7 +1341,7 @@ cv.addEventListener('click',ev=>{ audioInit(); const p=cellFromEvent(ev); const 
     const afford = bt.bossCost ? bossCoins>=bt.bossCost : coins>=bt.cost;
     if(buildable(p.c,p.r) && !occupancy[key] && afford){
       const cc=center(p.c,p.r);
-      const t={type:build,level:1,x:cc.x,y:cc.y,c:p.c,r:p.r,cd:0,angle:0,dmgTotal:0,combatTime:0,shakeT:0,frozenUntil:0,thawUntil:0,stunUntil:0,weakUntil:0};
+      const t={type:build,level:1,x:cc.x,y:cc.y,c:p.c,r:p.r,cd:0,angle:0,dmgTotal:0,combatTime:0,dmgRound:0,roundTime:0,mode:null,id:++towerId,shakeT:0,frozenUntil:0,thawUntil:0,stunUntil:0,weakUntil:0};
       t.maxhp=maxHp(t); t.hp=t.maxhp;
       towers.push(t); occupancy[key]=t; armed=true;   // first tower starts the clock
       if(bt.bossCost) bossCoins-=bt.bossCost; else coins-=bt.cost;
@@ -1295,36 +1358,43 @@ document.getElementById('waveBtn').onclick=()=>{ audioInit(); if(state==='idle')
 // ---- Overdrive (haste) button ----
 const hasteBtn=document.getElementById('hasteBtn');
 function fmtT(s){ s=Math.ceil(s); const m=Math.floor(s/60); return m+':'+String(s%60).padStart(2,'0'); }
-function updateHasteBtn(){ const t=now();
+function updateHasteBtn(){ const t=now(), ch=Math.min(HASTE_KILLS,kills-hasteMark);
   if(t<hasteUntil){ hasteBtn.className='haste active'; hasteBtn.disabled=true; hasteBtn.textContent='⚡ HASTE '+Math.ceil(hasteUntil-t)+'s'; }
-  else if(t<hasteReadyAt){ hasteBtn.className='haste cool'; hasteBtn.disabled=true; hasteBtn.textContent='⏳ '+fmtT(hasteReadyAt-t); }
-  else { hasteBtn.className='haste'; hasteBtn.disabled=false; hasteBtn.textContent='⚡ OVERDRIVE'; } }
-hasteBtn.onclick=()=>{ const t=now(); if(t>=hasteReadyAt){ audioInit(); hasteUntil=t+HASTE_DUR; hasteReadyAt=t+HASTE_CD; sfx('up');
-  texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.14,txt:'⚡ OVERDRIVE!',color:col('lime'),life:1.6,vy:-16,sz:28}); updateHasteBtn(); } };
+  else if(ch>=HASTE_KILLS){ hasteBtn.className='haste'; hasteBtn.disabled=false; hasteBtn.textContent='⚡ OVERDRIVE'; }
+  else { hasteBtn.className='haste cool'; hasteBtn.disabled=true; hasteBtn.textContent='⚡ '+ch+'/'+HASTE_KILLS+' kills'; } }
+function fireHaste(){ const t=now(); if(t>=hasteUntil && kills-hasteMark>=HASTE_KILLS){ audioInit(); hasteUntil=t+HASTE_DUR; hasteMark=kills; sfx('up');
+  texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.14,txt:'⚡ OVERDRIVE!',color:col('lime'),life:1.6,vy:-16,sz:28}); updateHasteBtn(); } }
+hasteBtn.onclick=fireHaste;
 // ---- Phantom Hunt button ----
 const phantomBtn=document.getElementById('phantomBtn');
-function updatePhantomBtn(){ if(!phantomUnlocked)return; const t=now();
+function updatePhantomBtn(){ if(!phantomUnlocked)return; const t=now(), ch=Math.min(PHUNT_KILLS,kills-phantomMark);
   if(t<phantomUntil){ phantomBtn.className='phantom active'; phantomBtn.disabled=true; phantomBtn.textContent='👻 HUNTING '+Math.ceil(phantomUntil-t)+'s'; }
-  else if(t<phantomReadyAt){ phantomBtn.className='phantom cool'; phantomBtn.disabled=true; phantomBtn.textContent='⏳ '+fmtT(phantomReadyAt-t); }
-  else { phantomBtn.className='phantom'; phantomBtn.disabled=false; phantomBtn.textContent='👻 PHANTOM HUNT'; } }
-phantomBtn.onclick=()=>{ if(!phantomUnlocked)return; const t=now(); if(t>=phantomReadyAt){ audioInit();
-  phantomUntil=t+PHUNT_DUR; phantomReadyAt=t+PHUNT_CD; sfx('phantom');
-  texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.14,txt:'👻 PHANTOM HUNT!',color:'#e6e9ff',life:1.6,vy:-16,sz:28}); updatePhantomBtn(); } };
+  else if(ch>=PHUNT_KILLS){ phantomBtn.className='phantom'; phantomBtn.disabled=false; phantomBtn.textContent='👻 PHANTOM HUNT'; }
+  else { phantomBtn.className='phantom cool'; phantomBtn.disabled=true; phantomBtn.textContent='👻 '+ch+'/'+PHUNT_KILLS+' kills'; } }
+function firePhantom(){ if(!phantomUnlocked)return; const t=now(); if(t>=phantomUntil && kills-phantomMark>=PHUNT_KILLS){ audioInit();
+  phantomUntil=t+PHUNT_DUR; phantomMark=kills; sfx('phantom');
+  texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.14,txt:'👻 PHANTOM HUNT!',color:'#e6e9ff',life:1.6,vy:-16,sz:28}); updatePhantomBtn(); } }
+phantomBtn.onclick=firePhantom;
 // ---- Reveal Path button ----
 const revealBtn=document.getElementById('revealBtn');
-function updateRevealBtn(){ if(!revealUnlocked)return; const t=now();
+function updateRevealBtn(){ if(!revealUnlocked)return; const t=now(), ch=Math.min(REVEAL_KILLS,kills-revealMark);
   if(t<revealUntil){ revealBtn.className='reveal active'; revealBtn.disabled=true; revealBtn.textContent='🗺 REVEALED '+Math.ceil(revealUntil-t)+'s'; }
-  else if(t<revealReadyAt){ revealBtn.className='reveal cool'; revealBtn.disabled=true; revealBtn.textContent='⏳ '+fmtT(revealReadyAt-t); }
-  else { revealBtn.className='reveal'; revealBtn.disabled=false; revealBtn.textContent='🗺 REVEAL PATH'; } }
-revealBtn.onclick=()=>{ if(!revealUnlocked)return; const t=now(); if(t>=revealReadyAt){ audioInit();
-  revealUntil=t+REVEAL_DUR; revealReadyAt=t+REVEAL_CD; sfx('up');
-  texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.14,txt:'🗺 PATHS REVEALED!',color:col('gold'),life:1.6,vy:-16,sz:26}); updateRevealBtn(); } };
-document.getElementById('upBtn').onclick=()=>{ if(!selected)return; const c=upCost(selected);
-  if(coins>=c && selected.level<12){ coins-=c; selected.level++; selected.maxhp=maxHp(selected); selected.hp=selected.maxhp; sfx('up'); syncUI(); } };
-document.getElementById('sellBtn').onclick=()=>{ if(!selected)return; const bt=TOWER_TYPES[selected.type];
+  else if(ch>=REVEAL_KILLS){ revealBtn.className='reveal'; revealBtn.disabled=false; revealBtn.textContent='🗺 REVEAL PATH'; }
+  else { revealBtn.className='reveal cool'; revealBtn.disabled=true; revealBtn.textContent='🗺 '+ch+'/'+REVEAL_KILLS+' kills'; } }
+function fireReveal(){ if(!revealUnlocked)return; const t=now(); if(t>=revealUntil && kills-revealMark>=REVEAL_KILLS){ audioInit();
+  revealUntil=t+REVEAL_DUR; revealMark=kills; sfx('up');
+  texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.14,txt:'🗺 PATHS REVEALED!',color:col('gold'),life:1.6,vy:-16,sz:26}); updateRevealBtn(); } }
+revealBtn.onclick=fireReveal;
+function upgradeSelected(){ if(!selected)return; const c=upCost(selected);
+  if(coins>=c && selected.level<12){ coins-=c; selected.level++; selected.maxhp=maxHp(selected); selected.hp=selected.maxhp; sfx('up'); syncUI(); }
+  else sfx('nope'); }
+function sellSelected(){ if(!selected)return; const bt=TOWER_TYPES[selected.type];
   if(bt.bossCost) bossCoins+=bt.bossCost; else coins+=sellVal(selected);   // premium towers refund a boss credit, not gold
+  if(hlTower===selected)hlTower=null;
   towers=towers.filter(t=>t!==selected); delete occupancy[selected.c+','+selected.r];
-  selected=null; document.getElementById('selCard').style.display='none'; sfx('coin'); syncUI(); };
+  selected=null; document.getElementById('selCard').style.display='none'; sfx('coin'); syncUI(); }
+document.getElementById('upBtn').onclick=upgradeSelected;
+document.getElementById('sellBtn').onclick=sellSelected;
 
 // ---- Audio (tiny synth, optional) ----
 let AC=null, audioOn=true;
@@ -1367,10 +1437,42 @@ function refreshSpeedUI(){ document.querySelectorAll('#speedctl .sb').forEach(b=
 document.querySelectorAll('#speedctl .sb').forEach(b=>b.onclick=()=>{ audioInit(); userSpeedIdx=+b.dataset.s; setSpeed(userSpeedIdx); });
 refreshSpeedUI();
 
+// ---- Pause ----
+function togglePause(){
+  if(!paused && !(state==='playing'||state==='idle'||state==='intro')) return;   // nothing to pause on a modal screen
+  paused=!paused;
+  if(paused){ pauseStart=performance.now()/1000; }
+  else { pausedAccum += performance.now()/1000 - pauseStart; last=now(); }   // bank paused wall-time so now() stays frozen
+  const pb=document.getElementById('pauseBtn');
+  pb.classList.toggle('on',paused);
+  pb.innerHTML = paused ? '▶ <b style="font-size:15px">RESUME</b>' : '⏸ <b style="font-size:15px">PAUSE</b>';
+}
+document.getElementById('pauseBtn').onclick=togglePause;
+// ---- Round / Overall DPS tabs ----
+document.querySelectorAll('#dpstabs .dt').forEach(b=>b.onclick=()=>{ statsMode=b.dataset.mode;
+  document.querySelectorAll('#dpstabs .dt').forEach(x=>x.classList.toggle('on',x.dataset.mode===statsMode));
+  renderStats(); });
+// ---- Keyboard: shop 1-9 · U upgrade · Del sell · Z/X/C abilities · P pause · Esc deselect ----
+window.addEventListener('keydown',ev=>{
+  if(ev.metaKey||ev.ctrlKey||ev.altKey) return;
+  const k=ev.key.toLowerCase();
+  if(k==='p'){ togglePause(); ev.preventDefault(); return; }
+  if(paused) return;
+  if(k>='1' && k<='9'){ const shop=document.getElementById('shop'); const btns=shop.querySelectorAll('.tw');
+    const el=btns[+k-1]; if(el && !el.disabled){ el.click(); ev.preventDefault(); } return; }
+  if(k==='u'){ upgradeSelected(); ev.preventDefault(); return; }
+  if(k==='delete'||k==='backspace'){ sellSelected(); ev.preventDefault(); return; }
+  if(k==='z'){ fireHaste(); ev.preventDefault(); return; }
+  if(k==='x'){ firePhantom(); ev.preventDefault(); return; }
+  if(k==='c'){ fireReveal(); ev.preventDefault(); return; }
+  if(k==='escape'){ build=null; selected=null; hlTower=null; refreshShopSel(); document.getElementById('selCard').style.display='none'; ev.preventDefault(); }
+});
+
 // ---- Main loop ----
 let last=now();
 function loop(){ const t=now(); let dt=t-last; last=t; if(dt>0.05)dt=0.05;
-  update(dt); render(); updateHasteBtn(); updatePhantomBtn(); updateRevealBtn();
+  if(!paused) update(dt);
+  render(); updateHasteBtn(); updatePhantomBtn(); updateRevealBtn();
   statsTimer-=dt; if(statsTimer<=0){ renderStats(); statsTimer=0.3; }
   requestAnimationFrame(loop); }
 reset(); renderBuffs(); loop();
