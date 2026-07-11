@@ -43,10 +43,16 @@
   /* RIGHT: the DPS list scrolls once you have lots of towers; the rest of the panel stays put. */
   .panel .stats-card{flex:1 1 auto;min-height:60px;display:flex;flex-direction:column;overflow:hidden}
   .panel .stats-card #statsBody{flex:1 1 auto;min-height:0;overflow-y:auto;padding-right:2px}
-  .attackbar{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;background:var(--panel);border:2px solid var(--line);border-radius:12px;padding:9px 12px}
-  .attackbar .ablabel{font-size:13.5px;font-weight:700;letter-spacing:1px;color:var(--muted);white-space:nowrap}
-  .attackbar .tgrid{display:flex;gap:8px}
-  .attackbar .tbtn{padding:8px 16px}
+  .attackbar{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:nowrap;overflow-x:auto;background:var(--panel);border:2px solid var(--line);border-radius:12px;padding:8px 10px}
+  .attackbar .ablabel{font-size:12px;font-weight:700;letter-spacing:.5px;color:var(--muted);white-space:nowrap}
+  .attackbar .ablabel .abnote{color:var(--faint);font-weight:400}
+  .attackbar .tgrid{display:flex;gap:6px;flex:none}
+  .attackbar .tbtn{padding:7px 12px}
+  /* compact the ability buttons so the whole bar stays on ONE line */
+  .attackbar .haste,.attackbar .phantom,.attackbar .reveal,.attackbar .nuke,.attackbar .stasis,.attackbar .meteor{
+    padding:7px 12px!important;font-size:12.5px;letter-spacing:.4px;flex:none}
+  .attackbar button[data-key]::after{margin-left:6px;padding:0 4px;font-size:10px}
+  @media(max-width:1100px){.attackbar{flex-wrap:wrap;overflow-x:visible}}
   h1{font-size:26px;margin:0;letter-spacing:2px;text-align:center;
     background:linear-gradient(90deg,var(--cyan),var(--mag));-webkit-background-clip:text;background-clip:text;color:transparent;
     text-shadow:0 0 18px rgba(120,80,255,.5)}
@@ -197,6 +203,7 @@
   /* TABLET input mode: no physical keys → hide every key badge + key-only hints */
   body.tablet button[data-key]::after{display:none!important}
   body.tablet .kbmonly{display:none!important}
+  body.tablet .tw .hk{display:none!important}   /* shop 1-5 hotkey badges don't apply on tablet */
   .strow{position:relative;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 10px;margin:5px 0;border-radius:7px;background:var(--panel2);font-size:14px;overflow:hidden}
   .strow .sbar{position:absolute;left:0;top:0;bottom:0;z-index:0;border-radius:7px}
   .strow .sname,.strow .sval{position:relative;z-index:1}
@@ -330,7 +337,7 @@
   <div class="leftbar">
     <h1>NEON DEFENSE</h1>
     <div class="card shop-card">
-      <h2>Towers — hover + press 1-5</h2>
+      <h2 id="shopHead">Towers — hover + press 1-5</h2>
       <div class="hint" id="shopHint" style="margin:-2px 0 8px"></div>
       <div class="shop" id="shop"></div>
     </div>
@@ -373,7 +380,7 @@
       <div class="overlay" id="patchOverlay"><div class="modal patch" id="patchInner"></div></div>
     </div>
     <div class="attackbar">
-      <span class="ablabel">🎯 GLOBAL ATTACK MODE <span style="color:var(--faint);font-weight:400">(every tower on “Auto”)</span></span>
+      <span class="ablabel">🎯 GLOBAL <span class="abnote">(Auto towers)</span></span>
       <div class="tgrid" id="tmode">
         <button class="tbtn" data-m="close">Near</button>
         <button class="tbtn" data-m="far">Far</button>
@@ -381,16 +388,16 @@
         <button class="tbtn" data-m="weak">Weak</button>
       </div>
       <button class="haste" id="hasteBtn" data-key="Z" title="+60% attack speed · recharges by kills · [Z]">⚡ OVERDRIVE</button>
-      <button class="phantom" id="phantomBtn" data-key="X" title="All towers hunt only Phantoms for 10s · unlocks at boss 10 · [X]" style="display:none">👻 PHANTOM HUNT</button>
-      <button class="reveal" id="revealBtn" data-key="C" title="Reveal the ghost routes for 10s · unlocks at boss 5 · [C]" style="display:none">🗺 REVEAL PATH</button>
+      <button class="phantom" id="phantomBtn" data-key="X" title="All towers hunt only Phantoms for 10s · unlocks at boss 10 · [X]" style="display:none">👻 PHANTOM</button>
+      <button class="reveal" id="revealBtn" data-key="C" title="Reveal the ghost routes for 10s · unlocks at boss 5 · [C]" style="display:none">🗺 REVEAL</button>
       <button class="nuke" id="nukeBtn" data-key="V" title="Vaporize every normal mob (specials + bosses survive) · unlocks at boss 15 · [V]" style="display:none">☢ NUKE</button>
       <button class="stasis" id="stasisBtn" data-key="B" title="Freeze EVERY enemy for 4s · unlocks at boss 20 · [B]" style="display:none">⏳ STASIS</button>
-      <button class="meteor" id="meteorBtn" data-key="N" title="Rain meteors for 8s · unlocks at boss 25 · [N]" style="display:none">☄ METEOR STORM</button>
+      <button class="meteor" id="meteorBtn" data-key="N" title="Rain meteors for 8s · unlocks at boss 25 · [N]" style="display:none">☄ METEOR</button>
     </div>
   </div>
   <div class="panel">
     <h1>SHOEMOCKER</h1>
-    <div class="verline" id="verLine" title="Version · build commit">v00.10 · <span id="buildSha">0735473</span></div>
+    <div class="verline" id="verLine" title="Version · build commit">v00.10 · <span id="buildSha">7471334</span></div>
     <button class="btn go" id="waveBtn">▶ START WAVE 1</button>
     <div class="card">
       <h2>Global Buffs — from bosses</h2>
@@ -796,13 +803,10 @@ function startWave(){
   spawnT=0.4;
   refreshWaveBtn();
 }
-function injectSpecial(type, frac){   // convert a grunt to a special in only ~frac of the lanes (min 1) — keeps them rare
-  const order=[...Array(lanes.length).keys()].sort(()=>Math.random()-.5);
-  const n=Math.max(1, Math.round(lanes.length*(frac||1)));
-  for(const li of order.slice(0,n)){
-    const idxs=spawnQueue.map((s,k)=>s.lane===li&&s.type==='grunt'?k:-1).filter(k=>k>=0);
-    if(idxs.length) spawnQueue[idxs[Math.floor(rand(0,idxs.length))]].type=type;
-  }
+function injectSpecial(type, frac){   // convert grunts to specials — DOUBLED density, spread across random lanes
+  const grunts=spawnQueue.map((s,k)=>s.type==='grunt'?k:-1).filter(k=>k>=0).sort(()=>Math.random()-.5);
+  const n=Math.min(grunts.length, Math.max(2, Math.round(lanes.length*(frac||1)*2)));   // ×2 vs the old per-lane count
+  for(let i=0;i<n;i++) spawnQueue[grunts[i]].type=type;
 }
 function startIntro(){
   if(state!=='idle') return;
@@ -1096,7 +1100,7 @@ function frostHit(x,y){ if(parts.length>PMAX)return; for(let i=0;i<5;i++){const 
 function psychePulse(t){ if(parts.length>PMAX)return;
   for(let i=0;i<16;i++){ const a=rand(0,6.283),sp=rand(40,170);
     parts.push({x:t.x,y:t.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:.5,max:.5,c:'#d99bff',sz:rand(2,4),g:0}); } }
-function bombExplode(bm){ shake=Math.max(shake,16); sfx('boom'); explosion(bm.x,bm.y,bm.R*0.9,'#ff7a3a');
+function bombExplode(bm){ sfx('boom'); explosion(bm.x,bm.y,bm.R*0.9,'#ff7a3a');   // no global screen-shake — too much with many Demolitions
   for(let i=0;i<40;i++){ const a=rand(0,6.283),sp=rand(60,bm.R*4);
     parts.push({x:bm.x,y:bm.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:rand(.3,.7),max:.7,c:i%2?'#ffcf3a':'#ff5a2a',sz:rand(2,6),g:40}); }
   for(const e of enemies){ if(e.hp<=0)continue; const d=dist(bm.x,bm.y,e.x,e.y); if(d<=bm.R){ const fall=1-0.35*(d/bm.R);
@@ -2267,6 +2271,7 @@ function applyInputMode(mode){ inputMode=mode; try{ localStorage.setItem('neonIn
   const kbm = mode!=='tablet';
   for(const [id,base,key] of KEYHINTS){ const el=document.getElementById(id); if(el) el.title = base + (kbm&&key?` · [${key}]`:''); }
   const sh=document.getElementById('shopHint'); if(sh) sh.innerHTML = kbm?SHOP_HINT.kbm:SHOP_HINT.tablet;
+  const shd=document.getElementById('shopHead'); if(shd) shd.textContent = kbm?'Towers — hover + press 1-5':'Towers — tap to build';
   const mb=document.getElementById('modeBtn'), ml=document.getElementById('modeLbl');
   if(mb){ mb.firstChild.textContent = (kbm?'🖱 ':'📱 '); mb.title = kbm?'Input: Keyboard & Mouse — tap to switch to Tablet':'Input: Tablet — tap to switch to Keyboard & Mouse'; }
   if(ml) ml.textContent = kbm?'KB + MOUSE':'TABLET';
