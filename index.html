@@ -479,6 +479,7 @@ const TOWER_TYPES = {
   tesla:   {name:'Tesla',  icon:'⚡', color:'purple', cost:110, dmg:20, rate:1.5,  range:150, crit:.04, critMult:2.0, chain:3, chainR:110, hp:120, desc:'Chain lightning — arcs between enemies.'},
   bomb:    {name:'Demolition',icon:'🧨',color:'orange',cost:130,dmg:0,  rate:0.0333,range:175,crit:0, critMult:1, hp:100, pspeed:470, bombDmg:800, bombR:118, fuse:5, bossUnlock:true, desc:'Lobs a lit dynamite — massive blast after 5s. 30s cd. Unlocks after your 1st boss.'},
   psyche:  {name:'Psyche', icon:'🔮', color:'mag',    cost:90,  dmg:0,  rate:0.1,  range:135, crit:0,  critMult:1, hp:80,  hold:3,  bossCost:1, bossUnlock:true, explosionImmune:true, desc:'Telekinetic hold — freezes enemies 3s (bosses resist 10s). Can\'t be destroyed by blasts (can still be frozen). Costs 💠 boss credits.'},
+  laser:   {name:'Laser', icon:'🔴',  color:'red',    cost:130, dmg:11, rate:2.2,  range:9999,crit:.03,critMult:2.0, hp:110, beamW:8, laser:true, bossCost:2, bossUnlock:true, desc:'Screen-wide beam — hits EVERYTHING in its path. Starts a fast weak baby; leveling makes it slower but a devastating wide beam. Costs 💠 boss credits.'},
 };
 const PHANTOM_DMG = 120;   // a Phantom blast deals EXACTLY this to every tower it touches
 // Tower HP is tuned so "Phantom hits to kill" == tower LEVEL (+ a tough bonus for tanky types like Cannon).
@@ -529,7 +530,7 @@ const BUFF_POOL = [
 ];
 
 // ---- Game state ----
-let coins, lives, wave, kills, bossCoins, towers, enemies, projs, beams, parts, texts, bombs, towersLost;
+let coins, lives, wave, kills, bossCoins, towers, enemies, projs, beams, parts, texts, bombs, towersLost, lasers;
 let gb, occupancy, build, selected, state, spawnQueue, spawnT, shake, hoverCell, waveActive, countdown, introT, statsTimer, armed, bossTowersUnlocked;
 let uiTimer=0;   // throttles the heavier shop/selected-card rebuild off the per-frame path
 let guideOpen=false;   // Bestiary overlay open?
@@ -578,7 +579,7 @@ const DIFFS=[
 ];
 function reset(){
   coins=220; lives=20; wave=0; kills=0; bossCoins=0; towersLost=0; bossTowersUnlocked=false;
-  towers=[]; enemies=[]; projs=[]; beams=[]; parts=[]; texts=[]; bombs=[];
+  towers=[]; enemies=[]; projs=[]; beams=[]; parts=[]; texts=[]; bombs=[]; lasers=[];
   userSpeedIdx=1; setSpeed(1); bossRampT=5;
   gb={atkSpeed:0,dmg:0,crit:0,critDmg:0,coin:0,range:0};
   occupancy={}; build=null; selected=null; state='ready'; pendingBuff=null;
@@ -602,6 +603,15 @@ function stats(t){
   const haste = now()<hasteUntil ? HASTE_MULT : 1;   // Overdrive
   const weak = now()<(t.weakUntil||0) ? 0.5 : 1;   // Hexling debuff
   const frenzy = now()<(t.frenzyUntil||0) ? (t.frenzyMul||1) : 1;   // Gatling's Frenzy signature ability
+  if(t.type==='laser'){   // INVERTED scaling — leveling makes it slower but far harder-hitting + a wider beam
+    return {
+      dmg:  b.dmg * Math.pow(1.55,L) * (1+gb.dmg) * weak,       // damage ramps hard
+      rate: b.rate * Math.pow(0.82,L) * (1+gb.atkSpeed) * haste * frenzy,   // fires SLOWER each level
+      range: 9999, crit: Math.min(.9, b.crit + .01*L + gb.crit), critMult: b.critMult + gb.critDmg,
+      splash:0, chain:0, chainR:0, slow:0, slowT:0, dot:0, dotT:0, pspeed:0, hold:0, bombDmg:0, bombR:0,
+      beamW: (b.beamW||8) + L*3, laser:true,
+    };
+  }
   return {
     dmg:   b.dmg * Math.pow(1.22,L) * (1+gb.dmg) * weak,
     rate:  b.rate * Math.pow(1.09,L) * (1+gb.atkSpeed) * haste * frenzy,
@@ -729,6 +739,16 @@ function fire(t){
       beams.push({x1:cur.x,y1:cur.y,x2:nx.x,y2:nx.y,life:.12,color:b.color});
       damage(nx,d2,false,t); hit.push(nx); cur=nx;
     }
+    sfx('zap');
+  } else if(t.type==='laser'){
+    // screen-wide beam through the target direction — hits EVERYTHING in its path
+    const dirx=Math.cos(t.angle), diry=Math.sin(t.angle), W2=s.beamW;
+    for(const e of enemies){ if(e.hp<=0)continue; const rx=e.x-t.x, ry=e.y-t.y;
+      const along=rx*dirx+ry*diry; if(along<0) continue;                       // only enemies in front of the muzzle
+      const perp=Math.abs(rx*(-diry)+ry*dirx); if(perp>W2+e.r) continue;        // within the beam width
+      const dmg=rollDmg(s); damage(e, dmg.v, dmg.crit && e===tgt, t); }
+    const far=Math.hypot(worldCols*TILE, worldRows*TILE)+TILE;
+    lasers.push({x:t.x, y:t.y, x2:t.x+dirx*far, y2:t.y+diry*far, w:W2*2, life:0.18, color:b.color});
     sfx('zap');
   } else {
     projs.push({x:t.x,y:t.y,tgt, type:t.type, owner:t, s, speed:s.pspeed, r:5, color:b.color, lastx:tgt.x, lasty:tgt.y});
@@ -975,7 +995,7 @@ function update(dt){
     if(t.frozenUntil && nn<t.frozenUntil) ff=0;
     else if(t.thawUntil && nn<t.thawUntil) ff=clamp((nn-t.frozenUntil)/(t.thawUntil-t.frozenUntil),0,1);
     if(t.stunUntil && nn<t.stunUntil) ff=0;   // Surge stun — instant off, instant recover
-    if(t.level>=3 && ff>0){ const A=ABIL[t.type]; if(t.abilCd==null)t.abilCd=A.cd; t.abilCd-=g; if(t.abilCd<=0){ towerSpecial(t); t.abilCd=A.cd; } }
+    if(t.level>=3 && ff>0 && ABIL[t.type]){ const A=ABIL[t.type]; if(t.abilCd==null)t.abilCd=A.cd; t.abilCd-=g; if(t.abilCd<=0){ towerSpecial(t); t.abilCd=A.cd; } }
     t.cd-=g*ff; const s=stats(t); if(ff>0 && t.cd<=0){ if(fire(t)) t.cd=1/s.rate; else t.cd=0.05; } }
   // projectiles
   for(const p of projs){
@@ -1025,6 +1045,7 @@ function updateFX(dt){
   for(const p of parts){ p.life-=dt; p.vy+=(p.g||0)*dt; p.x+=p.vx*dt; p.y+=p.vy*dt; }
   parts=parts.filter(p=>p.life>0);
   for(const b of beams)b.life-=dt; beams=beams.filter(b=>b.life>0);
+  for(const lz of lasers)lz.life-=dt; lasers=lasers.filter(l=>l.life>0);
   for(const t of texts){ t.life-=dt; t.y+=t.vy*dt; t.vy*=0.94; }
   texts=texts.filter(t=>t.life>0);
   if(shake>0)shake=Math.max(0,shake-dt*40);
@@ -1099,6 +1120,12 @@ function render(){
     ctx.shadowBlur=14; ctx.shadowColor=col(b.color); ctx.beginPath(); ctx.moveTo(b.x1,b.y1);
     const mx=(b.x1+b.x2)/2+rand(-10,10),my=(b.y1+b.y2)/2+rand(-10,10); ctx.lineTo(mx,my); ctx.lineTo(b.x2,b.y2); ctx.stroke();
     ctx.shadowBlur=0; ctx.globalAlpha=1; }
+  // laser beams — bright screen-wide bar with a white-hot core, fading out
+  for(const lz of lasers){ const c=col(lz.color), a=clamp(lz.life/0.18,0,1);
+    ctx.save(); ctx.lineCap='round'; ctx.shadowBlur=22; ctx.shadowColor=c;
+    ctx.globalAlpha=a*0.85; ctx.strokeStyle=c; ctx.lineWidth=lz.w; ctx.beginPath(); ctx.moveTo(lz.x,lz.y); ctx.lineTo(lz.x2,lz.y2); ctx.stroke();
+    ctx.globalAlpha=a; ctx.strokeStyle='#fff'; ctx.lineWidth=Math.max(2,lz.w*0.38); ctx.shadowBlur=10; ctx.beginPath(); ctx.moveTo(lz.x,lz.y); ctx.lineTo(lz.x2,lz.y2); ctx.stroke();
+    ctx.restore(); ctx.globalAlpha=1; ctx.shadowBlur=0; }
   // particles
   for(const p of parts){ ctx.globalAlpha=clamp(p.life/p.max,0,1); ctx.fillStyle=p.c; ctx.fillRect(p.x-p.sz/2,p.y-p.sz/2,p.sz,p.sz); }
   ctx.globalAlpha=1;
@@ -1262,6 +1289,17 @@ function drawTowerBody(type,sz,c,ang){
     ctx.fillStyle=c; ctx.globalAlpha=.4; ctx.beginPath(); ctx.arc(0,-sz*0.16+bob,sz*0.4,0,6.283); ctx.fill(); ctx.globalAlpha=1;
     ctx.strokeStyle=c; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,-sz*0.16+bob,sz*0.4,0,6.283); ctx.stroke();
     ctx.fillStyle='#fff'; ctx.globalAlpha=.6; ctx.beginPath(); ctx.arc(-sz*0.12,-sz*0.28+bob,sz*0.1,0,6.283); ctx.fill(); ctx.globalAlpha=1; return;
+  }
+  if(type==='laser'){            // heavy emitter cannon with a glowing lens
+    ctx.fillStyle='#141126'; ctx.beginPath(); ctx.arc(0,0,sz*0.5,0,6.283); ctx.fill(); ctx.strokeStyle=c; ctx.lineWidth=2.5; ctx.stroke();
+    ctx.save(); ctx.rotate(ang);
+    ctx.fillStyle=c; rr(-sz*0.1,-sz*0.17,sz*0.95,sz*0.34,sz*0.08); ctx.fill();               // barrel
+    ctx.fillStyle='#3a0a12'; rr(sz*0.5,-sz*0.1,sz*0.3,sz*0.2,sz*0.05); ctx.fill();            // dark emitter housing
+    ctx.fillStyle='#fff'; ctx.shadowBlur=13; ctx.shadowColor=c; ctx.beginPath(); ctx.arc(sz*0.86,0,sz*0.15,0,6.283); ctx.fill(); ctx.shadowBlur=0;   // hot lens
+    ctx.fillStyle=c; ctx.beginPath(); ctx.arc(sz*0.86,0,sz*0.08,0,6.283); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle=c; ctx.beginPath(); ctx.arc(0,0,sz*0.2,0,6.283); ctx.fill();
+    ctx.fillStyle='#fff'; ctx.globalAlpha=.5; ctx.beginPath(); ctx.arc(-sz*0.05,-sz*0.05,sz*0.08,0,6.283); ctx.fill(); ctx.globalAlpha=1; return;
   }
   ctx.fillStyle=c; rr(-sz/2,-sz/2,sz,sz,sz*0.15); ctx.fill();
 }
@@ -1574,18 +1612,20 @@ function renderSel(){
   const survives=Math.ceil(clamp(t.hp/PHANTOM_DMG,0,99));   // Phantom hits it can still take
   const rows=[['Damage',s.dmg.toFixed(0)],['Atk speed',s.rate.toFixed(2)+'/s'],
     ['Crit chance',(s.crit*100).toFixed(0)+'%'],['Crit dmg','×'+s.critMult.toFixed(1)],
-    ['Range',s.range.toFixed(0)],['Health',Math.round(t.hp)+' / '+Math.round(t.maxhp)],
+    ['Range', s.laser?'∞ full screen':s.range.toFixed(0)],['Health',Math.round(t.hp)+' / '+Math.round(t.maxhp)],
     ['Phantom hits','🛡 '+survives]];
+  if(s.laser)rows.push(['Beam width', Math.round(s.beamW)]);
   if(s.splash)rows.push(['Splash',s.splash]);
   if(s.chain)rows.push(['Chains',s.chain]);
   if(b.slow)rows.push(['Slow','×'+b.slow]);
   if(b.dot)rows.push(['Poison',s.dot.toFixed(0)+'/s']);
   rows.push(['Dmg dealt', Math.round(t.dmgTotal||0).toLocaleString()]);
   if((t.combatTime||0)>0.3) rows.push(['DPS', (t.dmgTotal/t.combatTime).toFixed(1)]);
-  const A=ABIL[t.type];   // signature ability line — locked <Lv3, active at Lv3, upgraded at Lv5
-  const abilStatus = t.level>=5 ? '<span style="color:var(--gold)">★ Lv5</span>' : t.level>=3 ? '<span style="color:var(--lime)">Lv3</span>' : '<span style="color:var(--faint)">🔒 Lv3</span>';
-  const abilRow = `<div class="row" style="margin-top:6px"><span class="k">✦ ${A.n}</span><span class="v">${abilStatus}</span></div>`
-    + `<div class="hint" style="font-size:11.5px;margin-top:2px">${A.d}</div>`;
+  const A=ABIL[t.type];   // signature ability line — locked <Lv3, active at Lv3, upgraded at Lv5 (laser has none)
+  let abilRow='';
+  if(A){ const abilStatus = t.level>=5 ? '<span style="color:var(--gold)">★ Lv5</span>' : t.level>=3 ? '<span style="color:var(--lime)">Lv3</span>' : '<span style="color:var(--faint)">🔒 Lv3</span>';
+    abilRow = `<div class="row" style="margin-top:6px"><span class="k">✦ ${A.n}</span><span class="v">${abilStatus}</span></div>`
+      + `<div class="hint" style="font-size:11.5px;margin-top:2px">${A.d}</div>`; }
   const modes=[['auto','Auto'],['close','Near'],['far','Far'],['strong','Str'],['weak','Weak']];
   const cur=t.mode||'auto';
   const mini=`<div class="row" style="margin-top:6px"><span class="k">🎯 Targets</span><span class="v" style="color:var(--faint);font-size:12px">${cur==='auto'?'follows global':'this tower'}</span></div>`
