@@ -1449,13 +1449,12 @@ function drawRadial(){
   ctx.beginPath(); ctx.arc(radial.x,radial.y,radial.rad,0,6.283); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha=1;
   const mc=hoverCell?center(hoverCell[0],hoverCell[1]):null;
   for(const bub of radial.bubbles){ const b=TOWER_TYPES[bub.type], c=col(b.color);
-    const afford=b.bossCost?bossCoins>=b.bossCost:coins>=b.cost;
-    const hot = mc && dist(mc.x,mc.y,bub.x,bub.y)<=20;
-    ctx.globalAlpha=afford?1:.4;
+    const afford=b.bossCost?bossCoins>=b.bossCost:coins>=b.cost;   // recomputed each frame → lights up the moment you can afford it
+    const hot = afford && mc && dist(mc.x,mc.y,bub.x,bub.y)<=20;   // only affordable bubbles react to hover
+    ctx.globalAlpha=afford?1:.32;                                  // can't afford → dim + (radialPick blocks selecting it)
     ctx.fillStyle='#141126'; ctx.beginPath(); ctx.arc(bub.x,bub.y,hot?21:18,0,6.283); ctx.fill();
-    ctx.strokeStyle=c; ctx.lineWidth=hot?3:2.4; ctx.shadowBlur=hot?16:9; ctx.shadowColor=c; ctx.stroke(); ctx.shadowBlur=0;
+    ctx.strokeStyle=c; ctx.lineWidth=hot?3:2.4; ctx.shadowBlur=afford?(hot?16:9):0; ctx.shadowColor=c; ctx.stroke(); ctx.shadowBlur=0;
     ctx.font='18px "Courier New",monospace'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(b.icon,bub.x,bub.y+1);
-    ctx.font='900 9px monospace'; ctx.fillStyle=b.bossCost?col('mag'):col('gold'); ctx.fillText((b.bossCost?'💠':'🪙')+(b.bossCost||b.cost),bub.x,bub.y+27);
     ctx.globalAlpha=1;
   }
   ctx.restore();
@@ -1601,8 +1600,11 @@ const shopTypes = () => Object.keys(TOWER_TYPES).filter(k=>!TOWER_TYPES[k].bossU
 function openRadial(c,r){ const cc=center(c,r), types=shopTypes(), n=types.length, rad=Math.max(52,26+n*6);
   radial={c,r,x:cc.x,y:cc.y,rad,bubbles:types.map((ty,i)=>{ const a=-Math.PI/2 + i/n*2*Math.PI; return {type:ty,x:cc.x+Math.cos(a)*rad,y:cc.y+Math.sin(a)*rad}; })}; }
 function radialPick(wx,wy){ if(!radial)return;
-  for(const b of radial.bubbles){ if(dist(wx,wy,b.x,b.y)<=20){ placeTower(b.type,radial.c,radial.r); radial=null; blankPlace=false; return; } }
-  radial=null; blankPlace=false;   // miss → close the picker
+  for(const b of radial.bubbles){ if(dist(wx,wy,b.x,b.y)<=20){ const bt=TOWER_TYPES[b.type];
+    const afford = bt.bossCost ? bossCoins>=bt.bossCost : coins>=bt.cost;
+    if(!afford){ sfx('nope'); return; }   // dimmed = not selectable; keep the picker open until you can afford it
+    placeTower(b.type,radial.c,radial.r); radial=null; blankPlace=false; return; } }
+  radial=null; blankPlace=false;   // clicked outside any bubble → close
 }
 function cancelPlacement(){ build=null; blankPlace=false; radial=null; }
 cv.addEventListener('mousemove',ev=>{ const p=cellFromEvent(ev); hoverCell=[p.c,p.r]; });
@@ -1760,10 +1762,10 @@ window.addEventListener('keydown',ev=>{
     const el=btns[+k-1]; if(el && !el.disabled){ el.click(); ev.preventDefault(); } return; }
   if(k==='q'){ upgradeSelected(); ev.preventDefault(); return; }
   if(k==='f'||k==='delete'||k==='backspace'){ sellSelected(); ev.preventDefault(); return; }
-  if(k==='e'){   // place a tower: E arms the blank picker; once you've placed one, E re-arms that same type
-    if(radial){ radial=null; }
-    else if(lastPlacedType && build!==lastPlacedType && !blankPlace){ build=lastPlacedType; }   // quick-repeat last
-    else { blankPlace=!blankPlace; build=null; }                                                 // toggle blank/radial picker
+  if(k==='e'){   // E always shows the blank ghost first; a 2nd E (from blank) auto-arms your last-placed tower
+    if(radial){ radial=null; blankPlace=true; }                                    // radial open → back to blank ghost
+    else if(blankPlace){ blankPlace=false; if(lastPlacedType) build=lastPlacedType; }  // blank → auto-arm last used
+    else { blankPlace=true; build=null; }                                          // idle or armed → (re)show blank ghost
     selected=null; refreshShopSel(); document.getElementById('selCard').style.display='none';
     ev.preventDefault(); return; }
   if(k==='z'){ fireHaste(); ev.preventDefault(); return; }
