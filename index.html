@@ -261,8 +261,8 @@
   <div class="leftbar">
     <h1>NEON DEFENSE</h1>
     <div class="card shop-card">
-      <h2>Towers — hover + press 1-9</h2>
-      <div class="hint" style="margin:-2px 0 8px">Hover a tower and press <b style="color:var(--cyan)">1-9</b> to hotkey it. Then press that number and <b style="color:var(--ink)">left-click</b> the board to place. Or press <b style="color:var(--cyan)">E</b> for the radial picker.</div>
+      <h2>Towers — hover + press 1-5</h2>
+      <div class="hint" style="margin:-2px 0 8px"><b style="color:var(--ink)">Left-click</b> an empty tile to pick a tower from the wheel. Or hover a tower and press <b style="color:var(--cyan)">1-5</b> to hotkey it, then press that number + click to place. Hold <b style="color:var(--cyan)">E</b> to <b style="color:var(--red)">focus-fire</b> the monster under your cursor.</div>
       <div class="shop" id="shop"></div>
     </div>
     <div class="card" id="selCard" style="display:none">
@@ -537,9 +537,11 @@ let discovered=(()=>{ try{ return new Set(JSON.parse(localStorage.getItem('neonD
 let targetMode='close';   // close | far | strong | weak — the DEFAULT; a tower with its own .mode overrides it
 let hlTower=null;         // tower highlighted by hovering its DPS-panel row
 let towerId=0;            // stable per-tower id so DPS rows can point back at a tower
-let blankPlace=false;     // E-placement: a blank ghost follows the mouse; click opens the radial tower picker
+let blankPlace=false;     // (retired) — kept declared so older helpers don't throw; placement is click-to-radial now
 let radial=null;          // open radial picker: {c,r,x,y,rad,bubbles:[{type,x,y}]}
-let lastPlacedType=null;  // last tower type actually placed → E re-arms it for quick repeat
+let lastPlacedType=null;  // last tower type actually placed
+let focusHeld=false;      // hold E → focus-fire the monster under the cursor
+let focusEnemy=null;      // the enemy currently under the cursor while focusing
 // User hotkeys: digit → tower type. Bind by hovering a shop tile / radial bubble and pressing a number (persists).
 let hotkeys=(()=>{ try{ return JSON.parse(localStorage.getItem('neonDefenseHotkeys')||'{}'); }catch(_){ return {}; } })();
 let hoverShopType=null, hoverRadialType=null, mouseWX=0, mouseWY=0;
@@ -696,15 +698,20 @@ function fire(t){
     if(!heldAny) return false;                // only immune bosses in range → don't waste the cooldown
     psychePulse(t); sfx('psyche'); return true;
   }
-  // target selection — a tower's OWN mode (t.mode) wins; otherwise it follows the global attack mode
+  // target selection — Focus fire (hold E) wins if the cursor's monster is in range; else a tower's OWN mode
+  // (t.mode) wins; else the global attack mode.
   const mode = t.mode || targetMode;
   let tgt=null, best=null;
-  for(const e of enemies){ if(e.hp<=0) continue;
-    if(huntPhantoms){ if(!e.exploder) continue;   // hunt: only Phantoms, no range limit → nearest one
-      const sc=-dist(t.x,t.y,e.x,e.y); if(best===null||sc>best){ best=sc; tgt=e; } continue; }
-    const d=dist(t.x,t.y,e.x,e.y); if(d>s.range) continue;
-    let sc; if(mode==='close') sc=-d; else if(mode==='far') sc=d; else if(mode==='strong') sc=e.hp; else sc=-e.hp;
-    if(best===null || sc>best){ best=sc; tgt=e; } }
+  if(focusHeld && focusEnemy && focusEnemy.hp>0 && dist(t.x,t.y,focusEnemy.x,focusEnemy.y)<=s.range){
+    tgt=focusEnemy;   // manual focus overrides everything for towers in range
+  } else {
+    for(const e of enemies){ if(e.hp<=0) continue;
+      if(huntPhantoms){ if(!e.exploder) continue;   // hunt: only Phantoms, no range limit → nearest one
+        const sc=-dist(t.x,t.y,e.x,e.y); if(best===null||sc>best){ best=sc; tgt=e; } continue; }
+      const d=dist(t.x,t.y,e.x,e.y); if(d>s.range) continue;
+      let sc; if(mode==='close') sc=-d; else if(mode==='far') sc=d; else if(mode==='strong') sc=e.hp; else sc=-e.hp;
+      if(best===null || sc>best){ best=sc; tgt=e; } }
+  }
   if(!tgt) return false;
   t.angle=Math.atan2(tgt.y-t.y, tgt.x-t.x);
   const b=TOWER_TYPES[t.type];
@@ -958,6 +965,9 @@ function update(dt){
     else { e.x+=(tc.x-e.x)/d*step; e.y+=(tc.y-e.y)/d*step; e.traveled+=step; }
   }
   enemies=enemies.filter(e=>e.hp>0);
+  // Focus fire (hold E): the enemy nearest the cursor (within its own radius) is the focus target this frame
+  focusEnemy=null;
+  if(focusHeld){ let bd=1e9; for(const e of enemies){ if(e.hp<=0)continue; const d=dist(mouseWX,mouseWY,e.x,e.y); if(d<=e.r+8 && d<bd){ bd=d; focusEnemy=e; } } }
   // towers
   for(const t of towers){ t.combatTime=(t.combatTime||0)+dt; if(waveActive)t.roundTime=(t.roundTime||0)+dt; if(t.shakeT>0)t.shakeT-=g;
     // frozen towers can't fire for 5s, then thaw back to full over 3s (ff ramps 0→1)
@@ -1048,12 +1058,6 @@ function render(){
     ctx.beginPath(); ctx.arc(cc.x,cc.y, s.range,0,6.283); ctx.stroke();
     ctx.globalAlpha=ok?.5:.3; ctx.fillStyle=ok?col(s.color):col('red');
     ctx.fillRect(c*TILE+8,r*TILE+8,TILE-16,TILE-16); ctx.globalAlpha=1; }
-  // blank placement ghost (E) — a neutral "?" tower following the mouse; click opens the radial picker
-  if(blankPlace && hoverCell && !radial){ const [c,r]=hoverCell; const ok=buildable(c,r)&&!occupancy[c+','+r];
-    const cc=center(c,r); ctx.save(); ctx.globalAlpha=.9; ctx.strokeStyle=ok?col('cyan'):col('red'); ctx.lineWidth=2;
-    rr(cc.x-16,cc.y-16,32,32,7); ctx.stroke();
-    ctx.globalAlpha=.7; ctx.fillStyle=ok?col('cyan'):col('red'); ctx.font='900 18px "Courier New",monospace'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('?',cc.x,cc.y+1);
-    ctx.restore(); ctx.globalAlpha=1; }
   // radial tower picker — bubbles of each buildable type around the chosen tile
   if(radial) drawRadial();
   // selected range
@@ -1071,6 +1075,12 @@ function render(){
   for(const t of towers)drawTower(t);
   // enemies
   for(const e of enemies)drawEnemy(e);
+  // focus-fire reticle (hold E) — a spinning crosshair on the monster under the cursor
+  if(focusHeld && focusEnemy && focusEnemy.hp>0){ const e=focusEnemy, R=e.r+10, T=now();
+    ctx.save(); ctx.translate(e.x,e.y); ctx.rotate(T*1.4); ctx.strokeStyle=col('red'); ctx.lineWidth=2.5; ctx.globalAlpha=.9; ctx.shadowBlur=10; ctx.shadowColor=col('red');
+    for(let k=0;k<4;k++){ ctx.rotate(Math.PI/2); ctx.beginPath(); ctx.arc(0,0,R,-0.5,0.5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(R-5,0); ctx.lineTo(R+6,0); ctx.stroke(); }
+    ctx.restore(); ctx.globalAlpha=1; ctx.shadowBlur=0; }
   // projectiles
   for(const p of projs){ ctx.fillStyle=col(p.color); ctx.shadowBlur=10; ctx.shadowColor=col(p.color);
     ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,6.283); ctx.fill(); ctx.shadowBlur=0; }
@@ -1681,12 +1691,13 @@ cv.addEventListener('mousemove',ev=>{ const p=cellFromEvent(ev); hoverCell=[p.c,
   hoverRadialType=null; if(radial){ for(const b of radial.bubbles){ if(dist(p.x,p.y,b.x,b.y)<=20){ hoverRadialType=b.type; break; } } } });
 cv.addEventListener('mouseleave',()=>{ hoverCell=null; hoverRadialType=null; });
 cv.addEventListener('click',ev=>{ audioInit(); const p=cellFromEvent(ev); const key=p.c+','+p.r;
-  if(radial){ radialPick(p.x,p.y); return; }                       // radial open → pick a bubble (or miss to close)
-  if(build){ if(placeTower(build,p.c,p.r) && !(TOWER_TYPES[build].bossCost ? bossCoins>=TOWER_TYPES[build].bossCost : coins>=TOWER_TYPES[build].cost)) build=null; return; }
-  if(blankPlace){ if(buildable(p.c,p.r) && !occupancy[key]) openRadial(p.c,p.r); else sfx('nope'); return; }   // blank ghost → open picker
-  // select existing tower
+  if(radial){ radialPick(p.x,p.y); return; }                       // wheel open → pick a bubble (or miss to close)
+  if(build){ const bt=TOWER_TYPES[build];                          // a hotkeyed tower is armed → place it
+    if(placeTower(build,p.c,p.r) && !(bt.bossCost ? bossCoins>=bt.bossCost : coins>=bt.cost)) build=null; return; }
   const t=occupancy[key];
-  selected = t||null; renderSel(); if(!t){document.getElementById('selCard').style.display='none';}
+  if(t){ selected=t; renderSel(); return; }                        // click a tower → select it
+  if(buildable(p.c,p.r) && !occupancy[key]){ openRadial(p.c,p.r); return; }   // click an empty buildable tile → open the wheel
+  selected=null; document.getElementById('selCard').style.display='none';    // clicked a road/edge → deselect
 });
 cv.addEventListener('contextmenu',ev=>{ev.preventDefault(); cancelPlacement(); selected=null; refreshShopSel(); document.getElementById('selCard').style.display='none';});
 document.getElementById('waveBtn').onclick=()=>{ audioInit(); if(state==='idle'){ armed=true; if((wave+1)%5===0) startIntro(); else startWave(); } };
@@ -1829,18 +1840,14 @@ window.addEventListener('keydown',ev=>{
   if(k==='p'){ togglePause(); ev.preventDefault(); return; }
   if(k==='g'){ toggleGuide(); ev.preventDefault(); return; }
   if(paused) return;
-  if(k>='1' && k<='9'){
+  if(k>='1' && k<='5'){   // only 5 hotkeys for now
     if(hoverShopType){ bindHotkey(k, hoverShopType); }                    // hovering a shop tile → BIND the key (only here)
-    else if(hotkeys[k]){ build=hotkeys[k]; blankPlace=false; radial=null;  // else → ARM the bound tower (click to place)
+    else if(hotkeys[k]){ build=hotkeys[k]; radial=null;                   // else → ARM the bound tower (click to place)
       selected=null; refreshShopSel(); document.getElementById('selCard').style.display='none'; }
     ev.preventDefault(); return; }
   if(k==='q'){ upgradeSelected(); ev.preventDefault(); return; }
   if(k==='f'||k==='delete'||k==='backspace'){ sellSelected(); ev.preventDefault(); return; }
-  if(k==='e'){   // E = blank placement ghost → left-click a tile to open the radial picker. Press E again to cancel.
-    if(radial){ radial=null; blankPlace=false; }   // picker open → close it
-    else { blankPlace=!blankPlace; build=null; }    // toggle the blank ghost
-    selected=null; refreshShopSel(); document.getElementById('selCard').style.display='none';
-    ev.preventDefault(); return; }
+  if(k==='e'){ focusHeld=true; ev.preventDefault(); return; }   // hold E → focus-fire the monster under the cursor
   if(k==='z'){ fireHaste(); ev.preventDefault(); return; }
   if(k==='x'){ firePhantom(); ev.preventDefault(); return; }
   if(k==='c'){ fireReveal(); ev.preventDefault(); return; }
@@ -1849,6 +1856,8 @@ window.addEventListener('keydown',ev=>{
   if(k==='n'){ fireMeteor(); ev.preventDefault(); return; }
   if(k==='escape'){ if(guideOpen){ toggleGuide(); } else { cancelPlacement(); selected=null; hlTower=null; refreshShopSel(); document.getElementById('selCard').style.display='none'; } ev.preventDefault(); }
 });
+window.addEventListener('keyup',ev=>{ if(ev.key.toLowerCase()==='e') focusHeld=false; });   // release E → stop focusing
+window.addEventListener('blur',()=>{ focusHeld=false; });   // safety: dropping focus if the window loses focus
 
 // ---- Bestiary (monster guide) — collectible: black silhouettes until you kill one, then colour + name + desc ----
 function drawMonsterThumb(cvEl,type,revealed){
