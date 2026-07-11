@@ -397,7 +397,7 @@
   </div>
   <div class="panel">
     <h1>SHOEMOCKER</h1>
-    <div class="verline" id="verLine" title="Version · build commit">v00.10 · <span id="buildSha">8f4d2b6</span></div>
+    <div class="verline" id="verLine" title="Version · build commit">v00.11 · <span id="buildSha">e3374b8</span></div>
     <button class="btn go" id="waveBtn">▶ START WAVE 1</button>
     <div class="card">
       <h2>Global Buffs — from bosses</h2>
@@ -609,6 +609,47 @@ function drawPac(){ if(!pac) return; const R=15;
   ctx.shadowBlur=0; ctx.fillStyle='#1a1206'; ctx.beginPath(); ctx.arc(R*0.15,-R*0.5,2.4,0,6.283); ctx.fill();   // eye
   ctx.restore();
 }
+// ---- Pac-Man loot — glowing pickups that drift onto the board during combat; Pac-Man drives over them ----
+const PICKUP_CAP=6, PICKUP_LIFE=15;
+const BUFF_KEYS=['dmg','atkSpeed','crit','critDmg','range','coin'];
+const BUFF_LBL={dmg:'DMG',atkSpeed:'SPD',crit:'CRIT',critDmg:'CDMG',range:'RNG',coin:'COIN'};
+function pickupColor(p){ if(p.kind==='coin')return col('gold'); if(p.kind==='boss')return col('red');
+  return {dmg:col('orange'),atkSpeed:col('cyan'),crit:col('mag'),critDmg:col('purple'),range:col('lime'),coin:col('gold')}[p.bk]||col('cyan'); }
+function spawnPickup(){
+  let r=Math.random()*100, kind = r<45?'coin' : r<85?'buff' : 'boss';   // 45% coin · 40% buff · 15% OH-SHIT boss
+  let x,y,tries=0; do{ x=rand(TILE, worldCols*TILE-TILE); y=rand(TILE, worldRows*TILE-TILE); tries++; }
+    while(pac && dist(x,y,pac.x,pac.y)<150 && tries<24);
+  const p={kind,x,y,life:PICKUP_LIFE};
+  if(kind==='buff') p.bk=BUFF_KEYS[Math.floor(Math.random()*BUFF_KEYS.length)];
+  if(kind==='coin') p.amt=40+Math.floor(wave*6)+Math.floor(rand(0,50));
+  pickups.push(p);
+}
+function collectPickup(p){
+  if(p.kind==='coin'){ coins+=p.amt; texts.push({x:p.x,y:p.y-10,txt:'🪙 +'+p.amt,color:col('gold'),life:1.4,vy:-30,sz:16}); sfx('coin'); syncHUD(); }
+  else if(p.kind==='buff'){ gb[p.bk]=(gb[p.bk]||0)+0.01; renderBuffs();
+    texts.push({x:p.x,y:p.y-10,txt:'✦ +1% '+BUFF_LBL[p.bk],color:col('cyan'),life:1.8,vy:-26,sz:16}); sfx('up'); }
+  else if(p.kind==='boss'){ const lane=Math.floor(rand(0,lanes.length));
+    spawnEnemy({type:'boss', lane, hpMul:Math.pow(1.19,Math.max(0,wave-1))*(1+wave*0.05), noBuff:true});
+    shake=Math.max(shake,22); sfx('phantom');
+    texts.push({x:p.x,y:p.y-10,txt:'☠ OH SHIT — BOSS!',color:col('red'),life:2.6,vy:-22,sz:22}); }
+  const c=pickupColor(p);
+  for(let i=0;i<12;i++){ const a=rand(0,6.283),sp=rand(40,170); parts.push({x:p.x,y:p.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:.5,max:.5,c,sz:rand(2,4),g:10}); }
+}
+function updatePickups(dt){
+  if(state==='playing'){ pickupT-=dt; if(pickupT<=0){ if(pickups.length<PICKUP_CAP) spawnPickup(); pickupT=rand(3.5,6.5); } }
+  for(const p of pickups){ p.life-=dt;
+    if(pac && dist(pac.x,pac.y,p.x,p.y) < 27){ collectPickup(p); p.dead=true; } }
+  pickups=pickups.filter(p=>!p.dead && p.life>0);
+}
+function drawPickups(){ const T=now();
+  for(const p of pickups){ const R=11, c=pickupColor(p), pulse=0.7+0.3*Math.abs(Math.sin(T*4+p.x*0.05));
+    const fade = p.life<3 ? (0.35+0.65*Math.abs(Math.sin(T*13))) : 1;   // blink out when about to expire
+    ctx.save(); ctx.shadowBlur=16; ctx.shadowColor=c;
+    ctx.globalAlpha=fade*0.85*pulse; ctx.fillStyle=c; ctx.beginPath(); ctx.arc(p.x,p.y,R,0,6.283); ctx.fill();
+    ctx.globalAlpha=fade; ctx.shadowBlur=0; ctx.font='900 13px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='#0c0a18'; ctx.fillText(p.kind==='coin'?'$':p.kind==='boss'?'☠':'✦', p.x, p.y+1);
+    ctx.restore(); ctx.globalAlpha=1; }
+}
 function updateCam(dt){ const tgt=fitScale(); viewScale+=(tgt-viewScale)*Math.min(1,dt*0.9);   // slow, cinematic zoom-out as the map grows
   camOffx=(W-worldCols*TILE*viewScale)/2; camOffy=(H-worldRows*TILE*viewScale)/2; }
 function screenToWorld(px,py){ return {x:(px-camOffx)/viewScale, y:(py-camOffy)/viewScale}; }
@@ -685,6 +726,7 @@ const ABIL = {
   tesla:  {cd:6,  n:'Static Discharge', d:'Zaps several enemies at once'},
   bomb:   {cd:14, n:'Carpet Bomb',      d:'Lobs a volley of extra bombs'},
   psyche: {cd:9,  n:'Mind Crush',       d:'Holds (and at Lv5 hurts) enemies in range'},
+  laser:  {cd:30, n:'Orbital Lances',   d:'A ring of laser spheres orbits the tower (one per level) — each detonates in a blast on contact. Lv5 orbs are bigger, hit harder, and set foes ablaze.'},
 };
 
 // ---- Boss buff pool ----
@@ -713,6 +755,7 @@ let blankPlace=false;     // (retired) — kept declared so older helpers don't 
 let moveTower=null;       // the tower currently in free-move mode (F) — next empty-tile click relocates it once
 let pac=null;             // WASD-driven Pac-Man (experimental action layer)
 const pacKeys={w:0,a:0,s:0,d:0};   // held-key state for smooth movement
+let pickups=[], pickupT=0;   // glowing loot Pac-Man collects (mini-buffs / coins / OH-SHIT boss)
 let radial=null;          // open radial picker: {c,r,x,y,rad,bubbles:[{type,x,y}]}
 let lastPlacedType=null;  // last tower type actually placed
 let focusHeld=false;      // hold E → focus-fire the monster under the cursor
@@ -764,7 +807,7 @@ function reset(){
   spawnQueue=[]; spawnT=0; shake=0; hoverCell=null; waveActive=false; countdown=GAP_BOSS; introT=0; statsTimer=0; armed=false;
   lanes=[]; addLane(); relayout(); viewScale=fitScale(); updateCam(1);
   pac={x:worldCols*TILE/2, y:worldRows*TILE/2, dir:0, speed:230, moving:false, eats:0};   // drop Pac-Man in the middle
-  pacKeys.w=pacKeys.a=pacKeys.s=pacKeys.d=0;
+  pacKeys.w=pacKeys.a=pacKeys.s=pacKeys.d=0; pickups=[]; pickupT=4;
   hasteUntil=0; hasteMark=-HASTE_KILLS;   // Overdrive is ALWAYS available (charged at start), then costs kills
   phantomUnlocked=false; phantomUntil=0; phantomMark=0;
   revealUnlocked=false; revealUntil=0; revealMark=0;
@@ -863,7 +906,7 @@ function spawnEnemy(spec){
     exploder:!!b.exploder, froster:!!b.froster, jolt:!!b.jolt, hex:!!b.hex,
     explodeAt:(b.exploder||b.froster||b.jolt||b.hex)?rand(0.25,0.82):0, exploded:false,
     slowUntil:0, slowMul:1, dot:0, dotUntil:0, fire:0, fireUntil:0, flash:0, traveled:0, holdUntil:0, psycheImmuneUntil:0});
-  if(spec.type==='boss') offerBossBuff();
+  if(spec.type==='boss' && !spec.noBuff) offerBossBuff();   // pickup-spawned "surprise" bosses skip the reward pick
 }
 
 // ---- Combat ----
@@ -1013,6 +1056,34 @@ function towerSpecial(t){
       bombs.push({x:tx,y:ty,fuse:1.2,dmg:(s.bombDmg||300)*0.5*(L5?1.5:1),R:(s.bombR||110)*0.8,fire:(s.fire||0)*(L5?1.3:1),fireT:s.fireT||0,owner:t}); } sfx('place'); }
   else if(t.type==='psyche'){ const rad=R*(L5?1.3:1), dur=L5?3:2;
     for(const e of enemies){ if(e.hp>0 && dist(t.x,t.y,e.x,e.y)<=rad){ if(!psycheResist(e)){ e.holdUntil=now()+dur; if(e.boss)e.psycheImmuneUntil=e.holdUntil+10; if(L5)damage(e,(s.dmg*2)||40,false,t); } else psycheResistCue(e); } } psychePulse(t); }
+  else if(t.type==='laser'){ const n=Math.min(12,t.level);   // Orbital Lances — spawn a fresh ring of n spheres
+    t.orbs=[]; for(let i=0;i<n;i++) t.orbs.push({a:i/n*6.283, alive:true, x:t.x, y:t.y});
+    t.orbSpin=t.orbSpin||0; sfx('psyche'); for(let k=0;k<12;k++)muzzle(t.x,t.y,rand(0,6.283),L5?'#fff':col('red')); }
+}
+// Orbital Lances — rotate the ring each frame; an orb that touches an enemy detonates in a blast and is spent.
+function updateLaserOrbs(t,g){ if(!t.orbs||!t.orbs.length)return;
+  const L5=t.level>=5, s=stats(t), orbR=46+t.level*3, spin=L5?2.8:2.0;
+  t.orbSpin=(t.orbSpin||0)+g*spin;
+  const hitR=(L5?13:10), blastR=(L5?72:52), dmg=s.dmg*(L5?7:4.5);
+  for(const orb of t.orbs){ if(!orb.alive)continue;
+    const ang=t.orbSpin+orb.a; orb.x=t.x+Math.cos(ang)*orbR; orb.y=t.y+Math.sin(ang)*orbR;
+    for(const e of enemies){ if(e.hp>0 && dist(orb.x,orb.y,e.x,e.y) < hitR+e.r*0.6){
+      explosion(orb.x,orb.y,blastR*0.8,L5?'#fff':col('red'));
+      for(const en of enemies){ if(en.hp>0 && dist(orb.x,orb.y,en.x,en.y)<=blastR){ damage(en,dmg,false,t);
+        if(L5){ en.fire=Math.max(en.fire||0,s.dmg*0.9); en.fireUntil=now()+1.4; en.fireOwner=t; } } }
+      orb.alive=false; break; } }
+  }
+  t.orbs=t.orbs.filter(o=>o.alive);
+}
+function drawLaserOrbs(t){ if(!t.orbs||!t.orbs.length)return; const L5=t.level>=5, orbR=46+t.level*3;
+  ctx.save();
+  ctx.strokeStyle=L5?'rgba(255,255,255,.16)':'rgba(255,77,94,.14)'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.arc(t.x,t.y,orbR,0,6.283); ctx.stroke();
+  for(const orb of t.orbs){ const Rr=L5?7:5;
+    ctx.shadowBlur=16; ctx.shadowColor=L5?'#fff':col('red');
+    ctx.fillStyle=L5?'#fff':'#ff5a6a'; ctx.beginPath(); ctx.arc(orb.x,orb.y,Rr,0,6.283); ctx.fill();
+    if(L5){ ctx.fillStyle='#ff5a6a'; ctx.beginPath(); ctx.arc(orb.x,orb.y,Rr*0.5,0,6.283); ctx.fill(); } }
+  ctx.shadowBlur=0; ctx.restore();
 }
 // one-time floating label when a tower first gains (Lv3) or upgrades (Lv5) its signature ability
 function announceAbility(t){ if(!ABIL[t.type])return;
@@ -1149,7 +1220,8 @@ function bombExplode(bm){ sfx('boom'); explosion(bm.x,bm.y,bm.R*0.9,'#ff7a3a'); 
 // ---- Update ----
 function update(dt){
   updateCam(dt);   // zoom eases toward the current world size every frame
-  updatePac(dt);   // Pac-Man moves in real time regardless of the state gates below
+  updatePac(dt);       // Pac-Man moves in real time regardless of the state gates below
+  updatePickups(dt);   // loot spawns during combat, expires, and is collected on contact
   if(state==='ready'||state==='bosspick'||state==='over'){ updateFX(dt); return; }
   if(state==='idle'){
     if(armed){ countdown-=dt;   // clock only runs once you've placed your first tower — a beat to look around
@@ -1189,7 +1261,8 @@ function update(dt){
     if(t.frozenUntil && nn<t.frozenUntil) ff=0;
     else if(t.thawUntil && nn<t.thawUntil) ff=clamp((nn-t.frozenUntil)/(t.thawUntil-t.frozenUntil),0,1);
     if(t.stunUntil && nn<t.stunUntil) ff=0;   // Surge stun — instant off, instant recover
-    if(t.level>=3 && ff>0 && ABIL[t.type]){ const A=ABIL[t.type]; if(t.abilCd==null)t.abilCd=A.cd; t.abilCd-=g; if(t.abilCd<=0){ towerSpecial(t); t.abilCd=A.cd; } }
+    if(t.level>=3 && ff>0 && ABIL[t.type]){ const A=ABIL[t.type]; if(t.abilCd==null)t.abilCd=(t.type==='laser'?1:A.cd); t.abilCd-=g; if(t.abilCd<=0){ towerSpecial(t); t.abilCd=A.cd; } }
+    if(t.type==='laser' && t.level>=3) updateLaserOrbs(t,g);   // Orbital Lances rotate + collide every frame
     t.cd-=g*ff; const s=stats(t); if(ff>0 && t.cd<=0){ if(fire(t)) t.cd=1/s.rate; else t.cd=0.05; } }
   // projectiles
   for(const p of projs){
@@ -1302,7 +1375,9 @@ function render(){
   for(const t of towers)drawTower(t);
   // enemies
   for(const e of enemies)drawEnemy(e);
-  drawPac();   // Pac-Man on top of the ghosts
+  for(const t of towers) if(t.orbs&&t.orbs.length) drawLaserOrbs(t);   // Orbital Lances over the ghosts
+  drawPickups();   // glowing Pac-Man loot
+  drawPac();       // Pac-Man on top of everything
   // focus-fire reticle (hold E) — a spinning crosshair on the monster under the cursor
   if(focusHeld && focusEnemy && focusEnemy.hp>0){ const e=focusEnemy, R=e.r+10, T=now();
     ctx.save(); ctx.translate(e.x,e.y); ctx.rotate(T*1.4); ctx.strokeStyle=col('red'); ctx.lineWidth=2.5; ctx.globalAlpha=.9; ctx.shadowBlur=10; ctx.shadowColor=col('red');
@@ -2220,7 +2295,15 @@ document.getElementById('guideOverlay').addEventListener('click',ev=>{ if(ev.tar
 
 // ---- Patch notes — the whole build history, newest on top (curated by hand as we build) ----
 const PATCH_NOTES=[
-  {v:'00.10', tag:'current', t:'Persistent lanes · free move · versioning · input modes', items:[
+  {v:'00.11', tag:'current', t:'Laser Orbital Lances · Pac-Man & loot · Psyche nerf · fire', items:[
+    'LASER signature ability — Orbital Lances: a ring of laser spheres orbits the tower (one per level, up to 12), each detonating in a blast on contact. 30s cooldown. Lv5 orbs are bigger, hit far harder, and set enemies ablaze.',
+    'Demolition blasts now set every minion caught in them ON FIRE — a fast, heavy burn-over-time with flame VFX.',
+    'Pac-Man (experimental): drive him with WASD, chomp enemies, and collect glowing loot — mini +1% global buffs, coin drops, and the occasional OH-SHIT pickup that spawns a surprise boss (run over two, get two).',
+    'Psyche rebalanced: hold can be shrugged off — specials 50%, normal mobs 10%, bosses keep their 10s per-grab immunity.',
+    'Upgrade-All only lights up once you can afford the WHOLE fleet upgrade (no more partial-spend surprises).',
+    'Demolition screen-shake removed (too much with a board full of them); attack bar fits on one line; specials spawn ~2× as often; Tablet mode hides the shop 1-5 badges.',
+  ]},
+  {v:'00.10', t:'Persistent lanes · free move · versioning · input modes', items:[
     'Added streams now LAYER on top — once a path is placed it never moves again, so your towers keep their exact spot for the whole game (old builds got stranded when the map regrew).',
     'When the arena grows, existing lanes only stretch their two end-tiles out to the new edge; the interior is frozen.',
     'Every tower gets ONE free relocate (G / ↪ MOVE button) — pick a new tile, then it\'s rooted for the rest of the game (or until a Phantom kills it).',
