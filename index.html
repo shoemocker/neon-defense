@@ -149,8 +149,12 @@
   .guidebtn:hover{border-color:var(--cyan);box-shadow:0 0 10px rgba(51,230,255,.3)}
   /* Bestiary (monster guide) */
   #guideOverlay{z-index:8}
+  #towerGuideOverlay{z-index:8}
   .modal.guide{border-color:var(--cyan);box-shadow:0 0 50px rgba(51,230,255,.4);max-width:920px;width:90%;text-align:center}
   .modal.guide h3{margin:0 0 2px;font-size:24px;letter-spacing:2px;color:var(--cyan)}
+  .modal.guide.tower{border-color:var(--purple);box-shadow:0 0 50px rgba(181,107,255,.4)}
+  .modal.guide.tower h3,.modal.guide.tower .arcade-top{color:var(--purple)!important}
+  .bcost{font-weight:800;font-size:13px;margin-top:3px}
   .modal.guide .gsub{color:var(--muted);font-size:13px;margin:0 0 8px}
   .bestiary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:6px}
   @media(max-width:780px){.bestiary{grid-template-columns:repeat(2,1fr)}}
@@ -262,7 +266,7 @@
     <h1>NEON DEFENSE</h1>
     <div class="card shop-card">
       <h2>Towers — hover + press 1-5</h2>
-      <div class="hint" style="margin:-2px 0 8px"><b style="color:var(--ink)">Left-click</b> an empty tile to pick a tower from the wheel. Or hover a tower and press <b style="color:var(--cyan)">1-5</b> to hotkey it, then press that number + click to place. Hold <b style="color:var(--cyan)">E</b> to <b style="color:var(--red)">focus-fire</b> the monster under your cursor.</div>
+      <div class="hint" style="margin:-2px 0 8px"><b style="color:var(--ink)">Left-click</b> an empty tile → pick from the wheel. Hover + <b style="color:var(--cyan)">1-5</b> to hotkey. Hold <b style="color:var(--cyan)">E</b> to <b style="color:var(--red)">focus-fire</b>. <b style="color:var(--cyan)">`</b> upgrades all lower same-type towers. Details in the <b style="color:var(--purple)">🗼 Tower Guide</b> (H).</div>
       <div class="shop" id="shop"></div>
     </div>
     <div class="card" id="selCard" style="display:none">
@@ -286,6 +290,7 @@
       <div class="stat bosscoins" title="Boss Credits — earned by killing bosses; buy Psyche towers">💠 <span class="lbl">CREDITS</span> <b id="bossCoins">0</b></div>
       <div class="stat lost" title="Towers destroyed by enemies">🏚 <span class="lbl">LOST</span> <b id="towersLost">0</b></div>
       <div class="stat lives" title="Lives remaining">❤️ <span class="lbl">LIVES</span> <b id="lives">0</b></div>
+      <button class="stat guidebtn" id="towerGuideBtn" title="Tower Guide — [H]">🗼 <span class="lbl">TOWERS</span></button>
       <button class="stat guidebtn" id="guideBtn" title="Monster Guide — [G]">👾 <span class="lbl">GUIDE</span></button>
     </div>
     <div class="canvas-wrap">
@@ -294,6 +299,7 @@
       <button class="mute" id="mute">🔊 SOUND</button>
       <div class="overlay" id="overlay"><div id="overlayInner"></div></div>
       <div class="overlay" id="guideOverlay"><div class="modal guide" id="guideInner"></div></div>
+      <div class="overlay" id="towerGuideOverlay"><div class="modal guide tower" id="towerGuideInner"></div></div>
     </div>
     <div class="attackbar">
       <span class="ablabel">🎯 GLOBAL ATTACK MODE <span style="color:var(--faint);font-weight:400">(every tower on “Auto”)</span></span>
@@ -533,7 +539,8 @@ const BUFF_POOL = [
 let coins, lives, wave, kills, bossCoins, towers, enemies, projs, beams, parts, texts, bombs, towersLost, lasers;
 let gb, occupancy, build, selected, state, spawnQueue, spawnT, shake, hoverCell, waveActive, countdown, introT, statsTimer, armed, bossTowersUnlocked;
 let uiTimer=0;   // throttles the heavier shop/selected-card rebuild off the per-frame path
-let guideOpen=false;   // Bestiary overlay open?
+let guideOpen=false;      // Bestiary overlay open?
+let towerGuideOpen=false; // Tower Guide overlay open?
 let discovered=(()=>{ try{ return new Set(JSON.parse(localStorage.getItem('neonDefenseBestiary')||'[]')); }catch(_){ return new Set(); } })();  // monsters ever killed (persists)
 let targetMode='close';   // close | far | strong | weak — the DEFAULT; a tower with its own .mode overrides it
 let hlTower=null;         // tower highlighted by hovering its DPS-panel row
@@ -584,7 +591,9 @@ function reset(){
   gb={atkSpeed:0,dmg:0,crit:0,critDmg:0,coin:0,range:0};
   occupancy={}; build=null; selected=null; state='ready'; pendingBuff=null;
   blankPlace=false; radial=null; lastPlacedType=null;
-  guideOpen=false; { const go=document.getElementById('guideOverlay'); if(go)go.classList.remove('on'); }
+  guideOpen=false; towerGuideOpen=false;
+  { const go=document.getElementById('guideOverlay'); if(go)go.classList.remove('on'); }
+  { const tg=document.getElementById('towerGuideOverlay'); if(tg)tg.classList.remove('on'); }
   spawnQueue=[]; spawnT=0; shake=0; hoverCell=null; waveActive=false; countdown=GAP_BOSS; introT=0; statsTimer=0; armed=false;
   lanes=[]; addLane(); relayout(); viewScale=fitScale(); updateCam(1);
   hasteUntil=0; hasteMark=-HASTE_KILLS;   // Overdrive is ALWAYS available (charged at start), then costs kills
@@ -1090,6 +1099,11 @@ function render(){
     ctx.beginPath(); ctx.arc(t.x,t.y,sz*0.7+10,0,6.283); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(t.x,t.y-sz-16); ctx.lineTo(t.x-7,t.y-sz-27); ctx.lineTo(t.x+7,t.y-sz-27); ctx.closePath(); ctx.fillStyle=col('cyan'); ctx.fill();
     ctx.restore(); ctx.globalAlpha=1; }
+  // hovering a shop tile → ring every tower of that type on the map
+  if(hoverShopType){ const c=col(TOWER_TYPES[hoverShopType].color), pl=0.5+0.4*Math.abs(Math.sin(now()*6));
+    ctx.save(); ctx.strokeStyle=c; ctx.globalAlpha=pl*0.9; ctx.lineWidth=2.5; ctx.shadowBlur=12; ctx.shadowColor=c;
+    for(const t of towers){ if(t.type===hoverShopType){ const sz=16+t.level*2.4; ctx.beginPath(); ctx.arc(t.x,t.y,sz*0.7+8,0,6.283); ctx.stroke(); } }
+    ctx.restore(); ctx.globalAlpha=1; }
   // reveal-path overlay (under units so the flowing arrows read behind the ghosts)
   if(now()<revealUntil) drawRevealPath();
   // towers
@@ -1591,7 +1605,7 @@ function buildShop(){
       <div class="tw" data-k="${k}">
         <span class="hk" data-hk-for="${k}"></span>
         <span class="ic" style="background:${col(t.color)}22;color:${col(t.color)};border:1px solid ${col(t.color)}">${t.icon}</span>
-        <span><span class="nm" style="color:${col(t.color)}">${t.name}</span><span class="ds">${t.desc}</span></span>
+        <span class="nm" style="color:${col(t.color)}">${t.name}</span>
         <span class="cost"${t.bossCost?' style="color:var(--mag)"':''}>${t.bossCost?'💠'+t.bossCost:'🪙'+t.cost}</span>
       </div>`).join('');
     shop.querySelectorAll('.tw').forEach(el=>{ el.onmouseenter=()=>hoverShopType=el.dataset.k;
@@ -1809,6 +1823,16 @@ meteorBtn.onclick=fireMeteor;
 function upgradeSelected(){ if(!selected)return; const c=upCost(selected);
   if(coins>=c && selected.level<12){ coins-=c; selected.level++; selected.maxhp=maxHp(selected); selected.hp=selected.maxhp; sfx('up'); syncUI(); }
   else sfx('nope'); }
+// ` = "bring the fleet up to par": upgrade EVERY same-type tower at ≤ the selected level up to selected.level+1,
+// spending on the lowest towers first until they're all there or you run out of gold.
+function upgradeFleet(){ if(!selected)return; const type=selected.type, TL=Math.min(12, selected.level+1);
+  let n=0;
+  while(true){ const cands=towers.filter(t=>t.type===type && t.level<TL);
+    if(!cands.length) break; cands.sort((a,b)=>a.level-b.level);
+    const t=cands[0], c=upCost(t); if(coins<c) break;
+    coins-=c; t.level++; t.maxhp=maxHp(t); t.hp=t.maxhp; n++; }
+  if(n){ sfx('up'); texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.12,txt:'⏫ '+n+' '+TOWER_TYPES[type].name+' → LV '+TL,color:col(TOWER_TYPES[type].color),life:1.8,vy:-16,sz:20}); syncUI(); }
+  else sfx('nope'); }
 function sellSelected(){ if(!selected)return; const bt=TOWER_TYPES[selected.type];
   if(bt.bossCost) bossCoins+=bt.bossCost; else coins+=sellVal(selected);   // premium towers refund a boss credit, not gold
   if(hlTower===selected)hlTower=null;
@@ -1879,6 +1903,7 @@ window.addEventListener('keydown',ev=>{
   const k=ev.key.toLowerCase();
   if(k==='p'){ togglePause(); ev.preventDefault(); return; }
   if(k==='g'){ toggleGuide(); ev.preventDefault(); return; }
+  if(k==='h'){ toggleTowerGuide(); ev.preventDefault(); return; }
   if(paused) return;
   if(k>='1' && k<='5'){   // only 5 hotkeys for now
     if(hoverShopType){ bindHotkey(k, hoverShopType); }                    // hovering a shop tile → BIND the key (only here)
@@ -1886,6 +1911,7 @@ window.addEventListener('keydown',ev=>{
       selected=null; refreshShopSel(); document.getElementById('selCard').style.display='none'; }
     ev.preventDefault(); return; }
   if(k==='q'){ upgradeSelected(); ev.preventDefault(); return; }
+  if(k==='`'){ upgradeFleet(); ev.preventDefault(); return; }   // upgrade all same-type towers ≤ this level to par
   if(k==='f'||k==='delete'||k==='backspace'){ sellSelected(); ev.preventDefault(); return; }
   if(k==='e'){ focusHeld=true; ev.preventDefault(); return; }   // hold E → focus-fire the monster under the cursor
   if(k==='z'){ fireHaste(); ev.preventDefault(); return; }
@@ -1894,7 +1920,7 @@ window.addEventListener('keydown',ev=>{
   if(k==='v'){ fireNuke(); ev.preventDefault(); return; }
   if(k==='b'){ fireStasis(); ev.preventDefault(); return; }
   if(k==='n'){ fireMeteor(); ev.preventDefault(); return; }
-  if(k==='escape'){ if(guideOpen){ toggleGuide(); } else { cancelPlacement(); selected=null; hlTower=null; refreshShopSel(); document.getElementById('selCard').style.display='none'; } ev.preventDefault(); }
+  if(k==='escape'){ if(guideOpen){ toggleGuide(); } else if(towerGuideOpen){ toggleTowerGuide(); } else { cancelPlacement(); selected=null; hlTower=null; refreshShopSel(); document.getElementById('selCard').style.display='none'; } ev.preventDefault(); }
 });
 window.addEventListener('keyup',ev=>{ if(ev.key.toLowerCase()==='e') focusHeld=false; });   // release E → stop focusing
 window.addEventListener('blur',()=>{ focusHeld=false; });   // safety: dropping focus if the window loses focus
@@ -1937,6 +1963,32 @@ function toggleGuide(){ guideOpen=!guideOpen; const o=document.getElementById('g
   if(guideOpen){ renderBestiary(); o.classList.add('on'); } else o.classList.remove('on'); }
 document.getElementById('guideBtn').onclick=toggleGuide;
 document.getElementById('guideOverlay').addEventListener('click',ev=>{ if(ev.target.id==='guideOverlay') toggleGuide(); });
+
+// ---- Tower Guide — the reference for every tower (art + stats + description) ----
+function drawTowerThumb(cvEl,type){
+  const g=cvEl.getContext('2d'), W2=cvEl.width, H2=cvEl.height; g.clearRect(0,0,W2,H2);
+  const c=col(TOWER_TYPES[type].color), sz=W2*0.32;
+  const prev=ctx; ctx=g; g.save(); g.translate(W2/2,H2/2+2); g.shadowBlur=8; g.shadowColor=c;
+  try{ drawTowerBody(type, sz, c, -Math.PI/4); } finally { g.restore(); ctx=prev; }
+}
+function renderTowerGuide(){
+  const el=document.getElementById('towerGuideInner');
+  const entries=Object.entries(TOWER_TYPES);
+  el.innerHTML=`<div class="arcade-top">★ TOWER GUIDE ★</div><h3>TOWERS</h3>
+    <p class="gsub">Everything each tower does — the panel just shows the essentials.</p>
+    <div class="bestiary">${entries.map(([k,t])=>`<div class="bcard on">
+        <canvas class="bthumb" width="74" height="74" data-t="${k}"></canvas>
+        <div class="bname" style="color:${col(t.color)}">${t.icon} ${t.name}</div>
+        <div class="bcost" style="color:${t.bossCost?'var(--mag)':'var(--gold)'}">${t.bossCost?'💠'+t.bossCost:'🪙'+t.cost}${t.bossUnlock?' · after boss 1':''}</div>
+        <div class="bdesc">${t.desc}</div></div>`).join('')}</div>
+    <button class="btn go bclose" id="towerGuideClose">CLOSE  ·  [H]</button>`;
+  el.querySelectorAll('.bthumb').forEach(cv2=>drawTowerThumb(cv2,cv2.dataset.t));
+  const cl=document.getElementById('towerGuideClose'); if(cl)cl.onclick=toggleTowerGuide;
+}
+function toggleTowerGuide(){ towerGuideOpen=!towerGuideOpen; const o=document.getElementById('towerGuideOverlay');
+  if(towerGuideOpen){ renderTowerGuide(); o.classList.add('on'); } else o.classList.remove('on'); }
+document.getElementById('towerGuideBtn').onclick=toggleTowerGuide;
+document.getElementById('towerGuideOverlay').addEventListener('click',ev=>{ if(ev.target.id==='towerGuideOverlay') toggleTowerGuide(); });
 
 // ---- Keep the side panels exactly as tall as the middle board (then they scroll inside) ----
 function fitPanels(){ const stage=document.querySelector('.stage'); if(!stage)return;
