@@ -261,6 +261,38 @@
     background:linear-gradient(180deg,var(--cyan),var(--mag));border-radius:8px;border:2px solid var(--panel2)}
   .panel::-webkit-scrollbar-thumb:hover,.leftbar::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,var(--mag),var(--purple))}
   @media(max-width:900px){#app{flex-direction:column;overflow:auto}.panel{width:auto}}
+  /* Music widget */
+  .musicbtn{cursor:pointer;transition:.1s}
+  .musicbtn:hover{border-color:var(--cyan);box-shadow:0 0 10px rgba(51,230,255,.3)}
+  .musicbtn.playing{border-color:var(--mag);box-shadow:0 0 12px rgba(255,59,212,.45)}
+  #musicPanel{position:fixed;top:66px;left:14px;z-index:30;width:300px;display:none;flex-direction:column;gap:9px;
+    background:var(--panel);border:2px solid var(--cyan);border-radius:14px;padding:14px;font-size:13px;
+    box-shadow:0 10px 40px rgba(0,0,0,.6),0 0 30px rgba(51,230,255,.22)}
+  #musicPanel.on{display:flex}
+  .mp-head{display:flex;justify-content:space-between;align-items:center;font-size:15px;letter-spacing:1px;color:var(--cyan)}
+  .mp-head button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px}
+  .mp-sec{display:flex;flex-direction:column;gap:8px}
+  .mp-file{display:block;background:var(--panel2);border:1px dashed var(--line);border-radius:8px;padding:8px;text-align:center;cursor:pointer;color:var(--muted)}
+  .mp-file input{display:none}
+  .mp-file:hover{border-color:var(--cyan);color:var(--ink)}
+  .mp-list{max-height:118px;overflow-y:auto;display:flex;flex-direction:column;gap:3px}
+  .mp-empty{color:var(--faint);font-size:12px;padding:4px}
+  .mp-track{padding:4px 8px;border-radius:6px;background:var(--panel2);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+  .mp-track:hover{color:var(--ink)}
+  .mp-track.on{color:var(--ink);border-left:3px solid var(--mag);background:linear-gradient(90deg,#2a2450,#1d1938)}
+  .mp-ctrls{display:flex;align-items:center;gap:6px}
+  .mp-ctrls button{flex:none;width:40px;height:32px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--ink);cursor:pointer;font-size:14px}
+  .mp-ctrls button:hover{border-color:var(--cyan)}
+  .mp-now{flex:1;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
+  .mp-vol{display:flex;align-items:center;gap:6px}
+  .mp-vol input{flex:1}
+  .mp-or{text-align:center;color:var(--faint);font-size:11px;letter-spacing:3px}
+  .mp-splabel{color:var(--muted);font-size:12px}
+  .mp-sprow{display:flex;gap:6px}
+  .mp-sprow input{flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--ink);font-family:inherit;font-size:12px}
+  .mp-sprow button{background:var(--panel2);border:1px solid var(--cyan);border-radius:8px;padding:6px 10px;color:var(--ink);cursor:pointer}
+  #mpSpotEmbed iframe{width:100%;border:0;border-radius:10px;margin-top:6px;display:block}
+  .mp-note{color:var(--faint);font-size:10.5px;line-height:1.35}
 </style>
 </head>
 <body>
@@ -284,6 +316,7 @@
   </div>
   <div class="stage">
     <div class="topbar">
+      <div class="stat musicbtn" id="musicBtn" title="Music — load MP3s or embed a Spotify playlist">🎵 <span class="lbl">MUSIC</span></div>
       <div class="stat speedbox">⏩ <div class="speedctl" id="speedctl">
         <button class="sb" data-s="0">50</button><button class="sb" data-s="1">100</button><button class="sb" data-s="2">150</button><button class="sb" data-s="3">200</button><button class="sb" data-s="4">250</button>
       </div></div>
@@ -336,6 +369,29 @@
       </div>
       <div id="statsBody"><span class="hint">Place towers to see live damage &amp; DPS.</span></div>
     </div>
+  </div>
+</div>
+
+<audio id="music" loop="false"></audio>
+<div id="musicPanel">
+  <div class="mp-head"><b>🎵 MUSIC</b><button id="mpClose" title="Close">✕</button></div>
+  <div class="mp-sec">
+    <label class="mp-file">📁 Load MP3s<input type="file" id="mpFiles" accept="audio/*" multiple></label>
+    <div id="mpList" class="mp-list"><div class="mp-empty">No tracks loaded — pick your synthwave MP3s.</div></div>
+    <div class="mp-ctrls">
+      <button id="mpPrev" title="Previous">⏮</button>
+      <button id="mpPlay" title="Play / pause">▶</button>
+      <button id="mpNext" title="Next">⏭</button>
+      <span id="mpNow" class="mp-now">—</span>
+    </div>
+    <div class="mp-vol">🔉<input type="range" id="mpVol" min="0" max="1" step="0.05" value="0.55"></div>
+  </div>
+  <div class="mp-or">— or —</div>
+  <div class="mp-sec">
+    <div class="mp-splabel">🎧 Spotify playlist / track</div>
+    <div class="mp-sprow"><input type="text" id="mpSpotUrl" placeholder="paste a Spotify URL…"><button id="mpSpotGo">Load</button></div>
+    <div id="mpSpotEmbed"></div>
+    <div class="mp-note">Full tracks play if you're logged into Spotify in this browser (else 30s previews).</div>
   </div>
 </div>
 
@@ -850,7 +906,11 @@ function towerSpecial(t){
       bombs.push({x:tx,y:ty,fuse:1.2,dmg:(s.bombDmg||300)*0.5*(L5?1.5:1),R:(s.bombR||110)*0.8,owner:t}); } sfx('place'); }
   else if(t.type==='psyche'){ const rad=R*(L5?1.3:1), dur=L5?3:2;
     for(const e of enemies){ if(e.hp>0 && dist(t.x,t.y,e.x,e.y)<=rad){ if(!(e.boss&&now()<(e.psycheImmuneUntil||0))){ e.holdUntil=now()+dur; if(e.boss)e.psycheImmuneUntil=e.holdUntil+10; if(L5)damage(e,(s.dmg*2)||40,false,t); } } } psychePulse(t); }
-  texts.push({x:t.x,y:t.y-26,txt:'✦ '+ABIL[t.type].n,color:col(TOWER_TYPES[t.type].color),life:1.0,vy:-18,sz:11});
+}
+// one-time floating label when a tower first gains (Lv3) or upgrades (Lv5) its signature ability
+function announceAbility(t){ if(!ABIL[t.type])return;
+  if(t.level===3) texts.push({x:t.x,y:t.y-26,txt:'✦ '+ABIL[t.type].n,color:col(TOWER_TYPES[t.type].color),life:1.8,vy:-18,sz:13});
+  else if(t.level===5) texts.push({x:t.x,y:t.y-26,txt:'✦ '+ABIL[t.type].n+' ★',color:col('gold'),life:2.0,vy:-18,sz:14});
 }
 
 // ---- Intro screen ----
@@ -1587,10 +1647,13 @@ function drawRadial(){
   const byType={}; for(const d in hotkeys) byType[hotkeys[d]]=d;   // reverse map for the hotkey badges
   for(const bub of radial.bubbles){ const b=TOWER_TYPES[bub.type], c=col(b.color);
     const afford=b.bossCost?bossCoins>=b.bossCost:coins>=b.cost;   // recomputed each frame → lights up the moment you can afford it
-    const hot = mouseWX && dist(mouseWX,mouseWY,bub.x,bub.y)<=26;  // hovering this icon
+    const hot = afford && mouseWX && dist(mouseWX,mouseWY,bub.x,bub.y)<=26;  // only affordable icons react to hover
     if(hot){ ctx.save(); ctx.globalAlpha=.3; ctx.fillStyle=c; ctx.shadowBlur=22; ctx.shadowColor=c; ctx.beginPath(); ctx.arc(bub.x,bub.y,26,0,6.283); ctx.fill(); ctx.restore(); }   // soft hover glow
-    ctx.globalAlpha=afford?1:.3;                                   // can't afford → dim (radialPick also blocks it)
     ctx.save(); ctx.translate(bub.x,bub.y); drawTowerBody(bub.type, hot?23:20, c, -Math.PI/4); ctx.restore();   // big tower art, no bubble ring
+    if(!afford){   // can't afford → dark veil over the icon + the price in red so it's obvious (radialPick also blocks it)
+      ctx.save(); ctx.globalAlpha=.62; ctx.fillStyle='#0a0817'; ctx.beginPath(); ctx.arc(bub.x,bub.y,22,0,6.283); ctx.fill();
+      ctx.globalAlpha=1; ctx.fillStyle=col('red'); ctx.font='900 11px "Courier New",monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText((b.bossCost?'💠':'🪙')+(b.bossCost||b.cost), bub.x, bub.y+1); ctx.restore(); }
     ctx.globalAlpha=1;
     const d=byType[bub.type];   // hotkey badge
     if(d){ ctx.fillStyle=col('cyan'); ctx.beginPath(); ctx.arc(bub.x+18,bub.y-18,8,0,6.283); ctx.fill();
@@ -1842,7 +1905,7 @@ function fireMeteor(){ if(!meteorUnlocked)return; const t=now(); if(t>=meteorUnt
   texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.14,txt:'☄ METEOR STORM!',color:col('gold'),life:1.6,vy:-16,sz:30}); updateMeteorBtn(); } }
 meteorBtn.onclick=fireMeteor;
 function upgradeSelected(){ if(!selected)return; const c=upCost(selected);
-  if(coins>=c && selected.level<12){ coins-=c; selected.level++; selected.maxhp=maxHp(selected); selected.hp=selected.maxhp; sfx('up'); syncUI(); }
+  if(coins>=c && selected.level<12){ coins-=c; selected.level++; selected.maxhp=maxHp(selected); selected.hp=selected.maxhp; announceAbility(selected); sfx('up'); syncUI(); }
   else sfx('nope'); }
 // ` = "bring the fleet up to par": upgrade EVERY same-type tower at ≤ the selected level up to selected.level+1,
 // spending on the lowest towers first until they're all there or you run out of gold.
@@ -1851,7 +1914,7 @@ function upgradeFleet(){ if(!selected)return; const type=selected.type, TL=Math.
   while(true){ const cands=towers.filter(t=>t.type===type && t.level<TL);
     if(!cands.length) break; cands.sort((a,b)=>a.level-b.level);
     const t=cands[0], c=upCost(t); if(coins<c) break;
-    coins-=c; t.level++; t.maxhp=maxHp(t); t.hp=t.maxhp; n++; }
+    coins-=c; t.level++; t.maxhp=maxHp(t); t.hp=t.maxhp; announceAbility(t); n++; }
   if(n){ sfx('up'); texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.12,txt:'⏫ '+n+' '+TOWER_TYPES[type].name+' → LV '+TL,color:col(TOWER_TYPES[type].color),life:1.8,vy:-16,sz:20}); syncUI(); }
   else sfx('nope'); }
 function sellSelected(){ if(!selected)return; const bt=TOWER_TYPES[selected.type];
@@ -1922,6 +1985,7 @@ document.querySelectorAll('#dpstabs .dt').forEach(b=>b.onclick=()=>{ statsMode=b
 // ---- Keyboard: shop 1-9 · U upgrade · Del sell · Z/X/C abilities · P pause · Esc deselect ----
 window.addEventListener('keydown',ev=>{
   if(ev.metaKey||ev.ctrlKey||ev.altKey) return;
+  const tn=ev.target&&ev.target.tagName; if(tn==='INPUT'||tn==='TEXTAREA') return;   // don't hijack keys while typing (e.g. Spotify URL)
   const k=ev.key.toLowerCase();
   if(k==='p'){ togglePause(); ev.preventDefault(); return; }
   if(k==='g'){ toggleGuide(); ev.preventDefault(); return; }
@@ -2031,6 +2095,40 @@ function loop(){ const t=now(); let dt=t-last; last=t; if(dt>0.05)dt=0.05;
   render(); updateHasteBtn(); updatePhantomBtn(); updateRevealBtn(); updateNukeBtn(); updateStasisBtn(); updateMeteorBtn();
   statsTimer-=dt; if(statsTimer<=0){ renderStats(); statsTimer=0.3; }
   requestAnimationFrame(loop); }
+// ---- Music player: load local MP3s (a synthwave playlist) or embed a Spotify playlist/track ----
+(function(){
+  const audio=document.getElementById('music'), panel=document.getElementById('musicPanel'), btn=document.getElementById('musicBtn');
+  const listEl=document.getElementById('mpList'), nowEl=document.getElementById('mpNow'), playBtn=document.getElementById('mpPlay');
+  let playlist=[], cur=-1;
+  try{ audio.volume=parseFloat(localStorage.getItem('neonDefenseVol')||'0.55'); }catch(_){ audio.volume=0.55; }
+  document.getElementById('mpVol').value=audio.volume;
+  btn.onclick=()=>panel.classList.toggle('on');
+  document.getElementById('mpClose').onclick=()=>panel.classList.remove('on');
+  document.getElementById('mpVol').oninput=e=>{ audio.volume=+e.target.value; try{ localStorage.setItem('neonDefenseVol',audio.volume); }catch(_){} };
+  function syncBtn(){ const playing=!audio.paused && !!audio.src; playBtn.textContent=playing?'⏸':'▶'; btn.classList.toggle('playing',playing); }
+  function renderList(){ if(!playlist.length){ listEl.innerHTML='<div class="mp-empty">No tracks loaded — pick your synthwave MP3s.</div>'; return; }
+    listEl.innerHTML=playlist.map((t,i)=>`<div class="mp-track${i===cur?' on':''}" data-i="${i}">${t.name.replace(/</g,'&lt;')}</div>`).join('');
+    listEl.querySelectorAll('.mp-track').forEach(el=>el.onclick=()=>playIndex(+el.dataset.i)); }
+  function playIndex(i){ if(i<0||i>=playlist.length)return; cur=i; audio.src=playlist[i].url; audio.play().catch(()=>{}); nowEl.textContent=playlist[i].name; renderList(); syncBtn(); }
+  document.getElementById('mpFiles').onchange=e=>{ const files=[...e.target.files]; if(!files.length)return;
+    playlist=files.map(f=>({name:f.name.replace(/\.[^.]+$/,''), url:URL.createObjectURL(f)})); cur=-1; renderList(); playIndex(0); };
+  playBtn.onclick=()=>{ if(!playlist.length)return; if(audio.paused)audio.play().catch(()=>{}); else audio.pause(); syncBtn(); };
+  document.getElementById('mpNext').onclick=()=>{ if(playlist.length) playIndex((cur+1)%playlist.length); };
+  document.getElementById('mpPrev').onclick=()=>{ if(playlist.length) playIndex((cur-1+playlist.length)%playlist.length); };
+  audio.onended=()=>{ if(playlist.length) playIndex((cur+1)%playlist.length); };
+  audio.onplay=syncBtn; audio.onpause=syncBtn;
+  const spotUrl=document.getElementById('mpSpotUrl'), spotEmbed=document.getElementById('mpSpotEmbed');
+  try{ const s=localStorage.getItem('neonDefenseSpotify'); if(s) spotUrl.value=s; }catch(_){}
+  function loadSpotify(){ const u=spotUrl.value.trim(); if(!u){ spotEmbed.innerHTML=''; return; }
+    const m=u.match(/open\.spotify\.com\/(playlist|track|album|artist|episode|show)\/([A-Za-z0-9]+)/);
+    if(!m){ spotEmbed.innerHTML='<div class="mp-note" style="color:var(--red)">Not a Spotify link.</div>'; return; }
+    spotEmbed.innerHTML='<iframe src="https://open.spotify.com/embed/'+m[1]+'/'+m[2]+'" height="152" allow="encrypted-media" loading="lazy"></iframe>';
+    try{ localStorage.setItem('neonDefenseSpotify',u); }catch(_){} }
+  document.getElementById('mpSpotGo').onclick=loadSpotify;
+  spotUrl.onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); loadSpotify(); } };
+  if(spotUrl.value) loadSpotify();
+})();
+
 reset(); renderBuffs(); fitPanels(); requestAnimationFrame(fitPanels); loop();
 </script>
 </body>
