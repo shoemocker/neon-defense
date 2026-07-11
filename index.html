@@ -397,7 +397,7 @@
   </div>
   <div class="panel">
     <h1>SHOEMOCKER</h1>
-    <div class="verline" id="verLine" title="Version · build commit">v00.10 · <span id="buildSha">1047e29</span></div>
+    <div class="verline" id="verLine" title="Version · build commit">v00.10 · <span id="buildSha">8f4d2b6</span></div>
     <button class="btn go" id="waveBtn">▶ START WAVE 1</button>
     <div class="card">
       <h2>Global Buffs — from bosses</h2>
@@ -585,6 +585,30 @@ const buildable=(c,r)=>c>=0&&c<worldCols&&r>=0&&r<worldRows&&!isRoad(c,r);
 let viewScale=1, camOffx=0, camOffy=0;
 const PAD=1;   // always keep a 1-tile border ring of blocks around the arena (so edge towers' arrows aren't clipped)
 function fitScale(){ return Math.min(W/((worldCols+2*PAD)*TILE), H/((worldRows+2*PAD)*TILE)); }
+// ---- Pac-Man (experimental) — WASD-driven, real-time (independent of game speed); chomps enemies he touches ----
+function updatePac(dt){
+  if(!pac || state==='over'||state==='bosspick'||state==='ready') return;
+  let mx=(pacKeys.d-pacKeys.a), my=(pacKeys.s-pacKeys.w);
+  if(mx||my){ const L=Math.hypot(mx,my); mx/=L; my/=L; pac.dir=Math.atan2(my,mx); pac.moving=true;
+    const pad=TILE*0.4;
+    pac.x=clamp(pac.x+mx*pac.speed*dt, pad, worldCols*TILE-pad);
+    pac.y=clamp(pac.y+my*pac.speed*dt, pad, worldRows*TILE-pad);
+  } else pac.moving=false;
+  // chomp any enemy he runs into (specials/bosses included — it's experimental)
+  const R=16;
+  for(const e of enemies){ if(e.hp>0 && dist(pac.x,pac.y,e.x,e.y) < R+e.r*0.6){
+    e.hp=0; pac.eats++; killEnemy(e,null);
+    for(let i=0;i<8;i++){ const a=rand(0,6.283),sp=rand(40,150); parts.push({x:e.x,y:e.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:.4,max:.4,c:'#ffe23a',sz:rand(2,4),g:20}); }
+  } }
+}
+function drawPac(){ if(!pac) return; const R=15;
+  const m = pac.moving ? (0.06+0.30*Math.abs(Math.sin(now()*16))) : 0.16;   // chomp when moving, ajar when idle
+  ctx.save(); ctx.translate(pac.x,pac.y); ctx.rotate(pac.dir);
+  ctx.fillStyle='#ffe23a'; ctx.shadowBlur=16; ctx.shadowColor='#ffcf3a';
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,R, m*Math.PI, (2-m)*Math.PI); ctx.closePath(); ctx.fill();
+  ctx.shadowBlur=0; ctx.fillStyle='#1a1206'; ctx.beginPath(); ctx.arc(R*0.15,-R*0.5,2.4,0,6.283); ctx.fill();   // eye
+  ctx.restore();
+}
 function updateCam(dt){ const tgt=fitScale(); viewScale+=(tgt-viewScale)*Math.min(1,dt*0.9);   // slow, cinematic zoom-out as the map grows
   camOffx=(W-worldCols*TILE*viewScale)/2; camOffy=(H-worldRows*TILE*viewScale)/2; }
 function screenToWorld(px,py){ return {x:(px-camOffx)/viewScale, y:(py-camOffy)/viewScale}; }
@@ -687,6 +711,8 @@ let hlTower=null;         // tower highlighted by hovering its DPS-panel row
 let towerId=0;            // stable per-tower id so DPS rows can point back at a tower
 let blankPlace=false;     // (retired) — kept declared so older helpers don't throw; placement is click-to-radial now
 let moveTower=null;       // the tower currently in free-move mode (F) — next empty-tile click relocates it once
+let pac=null;             // WASD-driven Pac-Man (experimental action layer)
+const pacKeys={w:0,a:0,s:0,d:0};   // held-key state for smooth movement
 let radial=null;          // open radial picker: {c,r,x,y,rad,bubbles:[{type,x,y}]}
 let lastPlacedType=null;  // last tower type actually placed
 let focusHeld=false;      // hold E → focus-fire the monster under the cursor
@@ -737,6 +763,8 @@ function reset(){
   { const tg=document.getElementById('towerGuideOverlay'); if(tg)tg.classList.remove('on'); }
   spawnQueue=[]; spawnT=0; shake=0; hoverCell=null; waveActive=false; countdown=GAP_BOSS; introT=0; statsTimer=0; armed=false;
   lanes=[]; addLane(); relayout(); viewScale=fitScale(); updateCam(1);
+  pac={x:worldCols*TILE/2, y:worldRows*TILE/2, dir:0, speed:230, moving:false, eats:0};   // drop Pac-Man in the middle
+  pacKeys.w=pacKeys.a=pacKeys.s=pacKeys.d=0;
   hasteUntil=0; hasteMark=-HASTE_KILLS;   // Overdrive is ALWAYS available (charged at start), then costs kills
   phantomUnlocked=false; phantomUntil=0; phantomMark=0;
   revealUnlocked=false; revealUntil=0; revealMark=0;
@@ -1121,6 +1149,7 @@ function bombExplode(bm){ sfx('boom'); explosion(bm.x,bm.y,bm.R*0.9,'#ff7a3a'); 
 // ---- Update ----
 function update(dt){
   updateCam(dt);   // zoom eases toward the current world size every frame
+  updatePac(dt);   // Pac-Man moves in real time regardless of the state gates below
   if(state==='ready'||state==='bosspick'||state==='over'){ updateFX(dt); return; }
   if(state==='idle'){
     if(armed){ countdown-=dt;   // clock only runs once you've placed your first tower — a beat to look around
@@ -1273,6 +1302,7 @@ function render(){
   for(const t of towers)drawTower(t);
   // enemies
   for(const e of enemies)drawEnemy(e);
+  drawPac();   // Pac-Man on top of the ghosts
   // focus-fire reticle (hold E) — a spinning crosshair on the monster under the cursor
   if(focusHeld && focusEnemy && focusEnemy.hp>0){ const e=focusEnemy, R=e.r+10, T=now();
     ctx.save(); ctx.translate(e.x,e.y); ctx.rotate(T*1.4); ctx.strokeStyle=col('red'); ctx.lineWidth=2.5; ctx.globalAlpha=.9; ctx.shadowBlur=10; ctx.shadowColor=col('red');
@@ -1846,7 +1876,7 @@ function renderSel(){
   let fleetCost=0; for(const x of fleet){ let l=x.level; while(l<TL){ fleetCost+=upCost({type:x.type,level:l}); l++; } }
   const ua=document.getElementById('upAllBtn');
   ua.textContent=`⏫ ALL ×${fleet.length} → LV ${TL}  🪙${fleetCost}`;
-  ua.disabled = !fleet.length || coins<Math.min(...fleet.map(x=>upCost(x)));
+  ua.disabled = !fleet.length || coins < fleetCost;   // only lights up once you can afford the WHOLE fleet upgrade
 }
 function buffChips(){
   const parts=[];
@@ -2116,6 +2146,8 @@ document.querySelectorAll('#dpstabs .dt').forEach(b=>b.onclick=()=>{ statsMode=b
   document.querySelectorAll('#dpstabs .dt').forEach(x=>x.classList.toggle('on',x.dataset.mode===statsMode));
   renderStats(); });
 // ---- Keyboard: shop 1-9 · U upgrade · Del sell · Z/X/C abilities · P pause · Esc deselect ----
+window.addEventListener('keyup',ev=>{ const k=ev.key.toLowerCase(); if(k in pacKeys) pacKeys[k]=0; });   // release WASD
+window.addEventListener('blur',()=>{ pacKeys.w=pacKeys.a=pacKeys.s=pacKeys.d=0; });   // dropped focus → stop drifting
 window.addEventListener('keydown',ev=>{
   if(ev.metaKey||ev.ctrlKey||ev.altKey) return;
   const tn=ev.target&&ev.target.tagName; if(tn==='INPUT'||tn==='TEXTAREA') return;   // don't hijack keys while typing (e.g. Spotify URL)
@@ -2126,6 +2158,7 @@ window.addEventListener('keydown',ev=>{
   if(k==='m'){ toggleGuide(); ev.preventDefault(); return; }        // M → Monster guide (G is now free-move)
   if(k==='h'){ toggleTowerGuide(); ev.preventDefault(); return; }
   if(paused) return;
+  if(k in pacKeys){ pacKeys[k]=1; ev.preventDefault(); return; }   // WASD → drive Pac-Man
   if(k>='1' && k<='5'){   // only 5 hotkeys for now
     if(hoverShopType){ bindHotkey(k, hoverShopType); }                    // hovering a shop tile → BIND the key (only here)
     else if(hotkeys[k]){ build=hotkeys[k]; radial=null;                   // else → ARM the bound tower (click to place)
@@ -2273,7 +2306,7 @@ const KEYHINTS=[
   ['upAllBtn','Upgrade every same-type tower ≤ this level, up to this level +1','`'],
 ];
 const SHOP_HINT={
-  kbm:'<b style="color:var(--ink)">Click a tower</b> then a tile to place it, or hover a tile + <b style="color:var(--cyan)">1-5</b> to hotkey a favorite. <b style="color:var(--cyan)">E</b> over a monster to <b style="color:var(--red)">lock-fire</b> it. <b style="color:var(--cyan)">Q</b> upgrade · <b style="color:var(--cyan)">`</b> upgrade all · <b style="color:var(--lime)">G</b> free-move · <b style="color:var(--red)">F</b> sell. Left-click build wheel is off in this mode — see the <b style="color:var(--purple)">🗼 Tower Guide</b> (H).',
+  kbm:'<b style="color:var(--ink)">Click a tower</b> then a tile to place it, or hover a tile + <b style="color:var(--cyan)">1-5</b> to hotkey a favorite. <b style="color:var(--cyan)">E</b> over a monster to <b style="color:var(--red)">lock-fire</b> it. <b style="color:var(--cyan)">Q</b> upgrade · <b style="color:var(--cyan)">`</b> upgrade all · <b style="color:var(--lime)">G</b> free-move · <b style="color:var(--red)">F</b> sell · <b style="color:var(--gold)">WASD</b> drive Pac-Man. Left-click build wheel is off in this mode — see the <b style="color:var(--purple)">🗼 Tower Guide</b> (H).',
   tablet:'<b style="color:var(--ink)">Tap a tower</b> then a tile to place it, or <b style="color:var(--ink)">tap an empty tile</b> for the build wheel. Tap a placed tower to select it, then use its <b style="color:var(--purple)">Upgrade · Move · Sell</b> buttons. See the <b style="color:var(--purple)">🗼 Tower Guide</b>.',
 };
 function applyInputMode(mode){ inputMode=mode; try{ localStorage.setItem('neonInputMode',mode); }catch(_){}
