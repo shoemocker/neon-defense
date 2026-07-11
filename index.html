@@ -545,7 +545,7 @@ const TOWER_TYPES = {
   tesla:   {name:'Tesla',  icon:'⚡', color:'purple', cost:110, dmg:20, rate:1.5,  range:150, crit:.04, critMult:2.0, chain:3, chainR:110, hp:120, desc:'Chain lightning — arcs between enemies.'},
   bomb:    {name:'Demolition',icon:'🧨',color:'orange',cost:130,dmg:0,  rate:0.0333,range:175,crit:0, critMult:1, hp:100, pspeed:470, bombDmg:800, bombR:118, fuse:5, bossUnlock:true, desc:'Lobs a lit dynamite — massive blast after 5s. 30s cd. Unlocks after your 1st boss.'},
   psyche:  {name:'Psyche', icon:'🔮', color:'mag',    cost:90,  dmg:0,  rate:0.1,  range:135, crit:0,  critMult:1, hp:80,  hold:3,  bossCost:1, bossUnlock:true, explosionImmune:true, desc:'Telekinetic hold — freezes enemies 3s (bosses resist 10s). Can\'t be destroyed by blasts (can still be frozen). Costs 💠 boss credits.'},
-  laser:   {name:'Laser', icon:'🔴',  color:'red',    cost:130, dmg:11, rate:2.2,  range:9999,crit:.03,critMult:2.0, hp:110, beamW:8, laser:true, bossCost:1, bossUnlock:true, desc:'Screen-wide beam — hits EVERYTHING in its path. Starts a fast weak baby; leveling makes it slower but a devastating wide beam. Costs 💠 boss credits.'},
+  laser:   {name:'Laser', icon:'🔴',  color:'red',    cost:130, dmg:11, rate:2.2,  range:9999,crit:.03,critMult:2.0, hp:110, beamW:8, laser:true, bossCost:1, bossUnlock:true, explosionImmune:true, desc:'Screen-wide beam — hits EVERYTHING in its path. Starts a fast weak baby; leveling makes it slower but a devastating wide beam. Can\'t be destroyed by blasts. Costs 💠 boss credits.'},
 };
 const PHANTOM_DMG = 120;   // a Phantom blast deals EXACTLY this to every tower it touches
 // Tower HP is tuned so "Phantom hits to kill" == tower LEVEL (+ a tough bonus for tanky types like Cannon).
