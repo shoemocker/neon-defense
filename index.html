@@ -73,6 +73,8 @@
   .btn.go:hover{filter:brightness(1.12)}
   .btn:disabled{opacity:.4;cursor:not-allowed}
   .btn.up{background:linear-gradient(90deg,#3a2f6e,#5a44b0);border-color:var(--purple)}
+  .btn.upall{width:100%;margin-top:8px;font-size:13.5px;padding:9px;background:linear-gradient(90deg,#173a44,#1f6c7a);border-color:var(--cyan);color:#dffaff}
+  .btn.upall:hover:not(:disabled){filter:brightness(1.15)}
   .btn.sell{background:#3a1f2a;border-color:var(--red);color:#ffd9de}
   .hint{color:var(--faint);font-size:13px;line-height:1.45}
   .sel-stats{font-size:14.5px;line-height:1.75}
@@ -276,6 +278,7 @@
         <button class="btn up" id="upBtn" data-key="Q">UPGRADE</button>
         <button class="btn sell" id="sellBtn" data-key="F" style="width:44%">SELL</button>
       </div>
+      <button class="btn upall" id="upAllBtn" data-key="&#96;" title="Upgrade every same-type tower at or below this level, up to this level +1">⏫ UPGRADE ALL</button>
     </div>
   </div>
   <div class="stage">
@@ -1649,6 +1652,12 @@ function renderSel(){
   const up=document.getElementById('upBtn'); const c=upCost(t);
   up.textContent=`UPGRADE 🪙${c}`; up.disabled=coins<c;
   document.getElementById('sellBtn').textContent = b.bossCost ? `SELL 💠${b.bossCost}` : `SELL 🪙${sellVal(t)}`;
+  // "upgrade all" — bring every same-type tower ≤ this level up to this level +1
+  const TL=Math.min(12,t.level+1), fleet=towers.filter(x=>x.type===t.type && x.level<TL);
+  let fleetCost=0; for(const x of fleet){ let l=x.level; while(l<TL){ fleetCost+=upCost({type:x.type,level:l}); l++; } }
+  const ua=document.getElementById('upAllBtn');
+  ua.textContent=`⏫ ALL ×${fleet.length} → LV ${TL}  🪙${fleetCost}`;
+  ua.disabled = !fleet.length || coins<Math.min(...fleet.map(x=>upCost(x)));
 }
 function buffChips(){
   const parts=[];
@@ -1840,6 +1849,7 @@ function sellSelected(){ if(!selected)return; const bt=TOWER_TYPES[selected.type
   selected=null; document.getElementById('selCard').style.display='none'; sfx('coin'); syncUI(); }
 document.getElementById('upBtn').onclick=upgradeSelected;
 document.getElementById('sellBtn').onclick=sellSelected;
+document.getElementById('upAllBtn').onclick=upgradeFleet;
 
 // ---- Audio (tiny synth, optional) ----
 let AC=null, audioOn=true;
