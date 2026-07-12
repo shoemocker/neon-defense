@@ -397,7 +397,7 @@
   </div>
   <div class="panel">
     <h1>SHOEMOCKER</h1>
-    <div class="verline" id="verLine" title="Version · build commit">v00.16 · <span id="buildSha">fdd340f</span></div>
+    <div class="verline" id="verLine" title="Version · build commit">v00.17 · <span id="buildSha">8253fea</span></div>
     <button class="btn go" id="waveBtn">▶ START WAVE 1</button>
     <div class="card">
       <h2>Global Buffs — from bosses</h2>
@@ -2408,14 +2408,21 @@ function renderBestiary(){
   el.querySelectorAll('.bthumb').forEach(cv2=>drawMonsterThumb(cv2,cv2.dataset.t,discovered.has(cv2.dataset.t)));
   const cl=document.getElementById('guideClose'); if(cl)cl.onclick=toggleGuide;
 }
-function toggleGuide(){ guideOpen=!guideOpen; const o=document.getElementById('guideOverlay');
-  if(guideOpen){ renderBestiary(); o.classList.add('on'); } else o.classList.remove('on'); }
+// the three modals (Monster Guide / Tower Guide / Patch) are MUTUALLY EXCLUSIVE — opening one closes the rest,
+// so clicking tab-to-tab always shows exactly one (no stacking / hidden-behind).
+function closeOverlays(){ guideOpen=towerGuideOpen=patchOpen=false;
+  ['guideOverlay','towerGuideOverlay','patchOverlay'].forEach(id=>{ const o=document.getElementById(id); if(o)o.classList.remove('on'); }); }
+function toggleGuide(){ const was=guideOpen; closeOverlays();
+  if(!was){ guideOpen=true; renderBestiary(); document.getElementById('guideOverlay').classList.add('on'); } }
 document.getElementById('guideBtn').onclick=toggleGuide;
 document.getElementById('guideOverlay').addEventListener('click',ev=>{ if(ev.target.id==='guideOverlay') toggleGuide(); });
 
 // ---- Patch notes — the whole build history, newest on top (curated by hand as we build) ----
 const PATCH_NOTES=[
-  {v:'00.16', tag:'current', t:'Pac-Man repairs towers · way more specials', items:[
+  {v:'00.17', tag:'current', t:'Guide/Tower/Patch panels switch cleanly', items:[
+    'The Monster Guide, Tower Guide and Patch panels are now mutually exclusive — clicking one closes the others, so you can flip tab-to-tab instead of them stacking or hiding behind each other.',
+  ]},
+  {v:'00.16', t:'Pac-Man repairs towers · way more specials', items:[
     'Pac-Man can now REPAIR towers! Run him into a Phantom-damaged tower and it kicks off a 10-second heal that refills its health on its own — with a pulsing green repair aura + rising cross so you can see it working.',
     'Special monsters cranked WAY up (Phantoms/Frostbites/Surges/Hexlings spawn far more often) — chaos mode. Let\'s see what happens.',
   ]},
@@ -2509,8 +2516,8 @@ function renderPatchNotes(){ const el=document.getElementById('patchInner');
     <button class="btn go bclose" id="patchClose" style="margin:14px auto 0;display:block">CLOSE</button>`;
   const cl=document.getElementById('patchClose'); if(cl)cl.onclick=togglePatch;
 }
-function togglePatch(){ patchOpen=!patchOpen; const o=document.getElementById('patchOverlay');
-  if(patchOpen){ renderPatchNotes(); o.classList.add('on'); } else o.classList.remove('on'); }
+function togglePatch(){ const was=patchOpen; closeOverlays();
+  if(!was){ patchOpen=true; renderPatchNotes(); document.getElementById('patchOverlay').classList.add('on'); } }
 document.getElementById('patchBtn').onclick=togglePatch;
 document.getElementById('patchOverlay').addEventListener('click',ev=>{ if(ev.target.id==='patchOverlay') togglePatch(); });
 
@@ -2581,8 +2588,8 @@ function renderTowerGuide(){
   el.querySelectorAll('.tgthumb').forEach(cv2=>drawTowerThumb(cv2,cv2.dataset.t));
   const cl=document.getElementById('towerGuideClose'); if(cl)cl.onclick=toggleTowerGuide;
 }
-function toggleTowerGuide(){ towerGuideOpen=!towerGuideOpen; const o=document.getElementById('towerGuideOverlay');
-  if(towerGuideOpen){ renderTowerGuide(); o.classList.add('on'); } else o.classList.remove('on'); }
+function toggleTowerGuide(){ const was=towerGuideOpen; closeOverlays();
+  if(!was){ towerGuideOpen=true; renderTowerGuide(); document.getElementById('towerGuideOverlay').classList.add('on'); } }
 document.getElementById('towerGuideBtn').onclick=toggleTowerGuide;
 document.getElementById('towerGuideOverlay').addEventListener('click',ev=>{ if(ev.target.id==='towerGuideOverlay') toggleTowerGuide(); });
 
