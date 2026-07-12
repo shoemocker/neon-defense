@@ -397,7 +397,7 @@
   </div>
   <div class="panel">
     <h1>SHOEMOCKER</h1>
-    <div class="verline" id="verLine" title="Version · build commit">v00.12 · <span id="buildSha">cba9193</span></div>
+    <div class="verline" id="verLine" title="Version · build commit">v00.13 · <span id="buildSha">28a4001</span></div>
     <button class="btn go" id="waveBtn">▶ START WAVE 1</button>
     <div class="card">
       <h2>Global Buffs — from bosses</h2>
@@ -586,7 +586,7 @@ let viewScale=1, camOffx=0, camOffy=0;
 const PAD=1;   // always keep a 1-tile border ring of blocks around the arena (so edge towers' arrows aren't clipped)
 function fitScale(){ return Math.min(W/((worldCols+2*PAD)*TILE), H/((worldRows+2*PAD)*TILE)); }
 // ---- Pac-Man (experimental) — WASD-driven, real-time (independent of game speed); chomps enemies he touches ----
-const PAC_RESPAWN=8, PAC_POWER=30;
+const PAC_RESPAWN=8, PAC_POWER=15;
 const isSpecial=e=>e.boss||e.exploder||e.froster||e.jolt||e.hex;   // bosses + special mobs — never edible
 function updatePac(dt){
   if(!pac || state==='over'||state==='bosspick'||state==='ready') return;
@@ -604,8 +604,14 @@ function updatePac(dt){
   const R=16, powered=pac.power>0;
   for(const e of enemies){ if(e.hp<=0)continue;
     if(dist(pac.x,pac.y,e.x,e.y) < R+e.r*0.6){
-      if(powered){ if(!isSpecial(e)){ e.hp=0; pac.eats++; killEnemy(e,null);
-          for(let i=0;i<8;i++){ const a=rand(0,6.283),sp=rand(40,150); parts.push({x:e.x,y:e.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:.4,max:.4,c:'#ffe23a',sz:rand(2,4),g:20}); } } }
+      if(powered){
+        if(!isSpecial(e)){ e.hp=0; pac.eats++; killEnemy(e,null);
+          for(let i=0;i<8;i++){ const a=rand(0,6.283),sp=rand(40,150); parts.push({x:e.x,y:e.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:.4,max:.4,c:'#ffe23a',sz:rand(2,4),g:20}); } }
+        else {   // can't eat bosses/specials — MARK them instead: +15% damage taken for a while
+          if(!e.vulnUntil || e.vulnUntil<now()+0.2){ texts.push({x:e.x,y:e.y-e.r-6,txt:'⤫ MARKED −15%',color:col('gold'),life:1.2,vy:-24,sz:12}); }
+          e.vulnUntil=now()+8;
+        }
+      }
       else { pacDie(); return; }   // no power → the ghost gets him
     }
   }
@@ -660,7 +666,7 @@ function collectPickup(p){
     shake=Math.max(shake,8); sfx('up');
     texts.push({x:p.x,y:p.y-10,txt:'★ POWER MODE — EAT THE GHOSTS!',color:col('gold'),life:2.6,vy:-22,sz:20}); }
   else if(p.kind==='boss'){ const lane=Math.floor(rand(0,lanes.length));
-    spawnEnemy({type:'boss', lane, hpMul:Math.pow(1.19,Math.max(0,wave-1))*(1+wave*0.05), noBuff:true});
+    spawnEnemy({type:'boss', lane, hpMul:Math.pow(1.19,Math.max(0,wave-1))*(1+wave*0.05), noBuff:true, surprise:true});
     shake=Math.max(shake,22); sfx('phantom');
     texts.push({x:p.x,y:p.y-10,txt:'☠ OH SHIT — BOSS!',color:col('red'),life:2.6,vy:-22,sz:22}); }
   const c=pickupColor(p);
@@ -807,6 +813,7 @@ let pac=null;             // WASD-driven Pac-Man (experimental action layer)
 const pacKeys={w:0,a:0,s:0,d:0};   // held-key state for smooth movement
 let pickups=[], pickupT=0;   // glowing loot Pac-Man collects (mini-buffs / coins / power-star / OH-SHIT boss)
 let meteors=[];              // falling Meteor Storm visuals (streak down → impact)
+let bursts=[];               // expanding shockwave rings (laser-orb detonations, etc.)
 let radial=null;          // open radial picker: {c,r,x,y,rad,bubbles:[{type,x,y}]}
 let lastPlacedType=null;  // last tower type actually placed
 let focusHeld=false;      // hold E → focus-fire the monster under the cursor
@@ -858,7 +865,7 @@ function reset(){
   spawnQueue=[]; spawnT=0; shake=0; hoverCell=null; waveActive=false; countdown=GAP_BOSS; introT=0; statsTimer=0; armed=false;
   lanes=[]; addLane(); relayout(); viewScale=fitScale(); updateCam(1);
   pac={x:worldCols*TILE/2, y:worldRows*TILE/2, dir:0, speed:230, moving:false, eats:0, alive:true, power:0, respawn:0};   // drop Pac-Man in the middle
-  pacKeys.w=pacKeys.a=pacKeys.s=pacKeys.d=0; pickups=[]; pickupT=4; meteors=[];
+  pacKeys.w=pacKeys.a=pacKeys.s=pacKeys.d=0; pickups=[]; pickupT=4; meteors=[]; bursts=[];
   hasteUntil=0; hasteMark=-HASTE_KILLS;   // Overdrive is ALWAYS available (charged at start), then costs kills
   phantomUnlocked=false; phantomUntil=0; phantomMark=0;
   revealUnlocked=false; revealUntil=0; revealMark=0;
@@ -953,7 +960,7 @@ function spawnEnemy(spec){
       resist=keys[Math.floor(Math.random()*keys.length)]; color=col(TOWER_TYPES[resist].color); }
   }
   enemies.push({type:spec.type, x:s.x, y:s.y, hp, maxhp:hp, lane:spec.lane||0, wp:1, r:b.r, speed:b.speed,
-    reward:b.reward+Math.floor(wave*0.8), leak:b.leak, boss:!!b.boss, resist, color, dx:1, dy:0,
+    reward:b.reward+Math.floor(wave*0.8), leak:b.leak, boss:!!b.boss, surprise:!!spec.surprise, resist, color, dx:1, dy:0,
     exploder:!!b.exploder, froster:!!b.froster, jolt:!!b.jolt, hex:!!b.hex,
     explodeAt:(b.exploder||b.froster||b.jolt||b.hex)?rand(0.25,0.82):0, exploded:false,
     slowUntil:0, slowMul:1, dot:0, dotUntil:0, fire:0, fireUntil:0, flash:0, traveled:0, holdUntil:0, psycheImmuneUntil:0});
@@ -1056,6 +1063,7 @@ function damage(e,amt,crit,src){
   const st = src && src.type;               // tower type of the source (tower or projectile)
   let res=false;
   if(st && st===e.resist){ amt*=RESIST; res=true; crit=false; }
+  if(e.vulnUntil && now()<e.vulnUntil) amt*=1.15;   // Pac-Man's power-mode mark: +15% damage taken
   const tw = src ? (src.owner || (src.level!==undefined?src:null)) : null;   // the tower that dealt it
   if(tw){ const real=Math.min(amt, Math.max(0,e.hp));                        // count real (non-overkill) damage
     tw.dmgTotal=(tw.dmgTotal||0)+real; tw.dmgRound=(tw.dmgRound||0)+real;    // lifetime + this-round tallies
@@ -1071,7 +1079,7 @@ function killEnemy(e,src){
   coins+=rew; sfx('coin');
   texts.push({x:e.x,y:e.y-e.r,txt:'+'+rew,color:col('gold'),life:.9,vy:-34,sz:14});
   explosion(e.x,e.y,e.boss?70:e.r+10,col(ENEMY_TYPES[e.type].color));
-  if(e.boss){
+  if(e.boss && !e.surprise){   // ONLY the real wave bosses (5/10/15/20/25) mint credits — Pac's surprise bosses don't
     bossCoins++; bossTowersUnlocked=true;   // killing a boss mints a Boss Credit + unlocks the premium towers
     texts.push({x:e.x,y:e.y-e.r-22,txt:'💠 +1 BOSS CREDIT',color:col('mag'),life:2.4,vy:-20,sz:18});
     if(pendingBuff){ gb[pendingBuff.k]+=pendingBuff.v;
@@ -1102,8 +1110,9 @@ function towerSpecial(t){
   else if(t.type==='tesla'){ const n=L5?7:4, dmg=s.dmg*(L5?1.2:0.8);
     const near=enemies.filter(e=>e.hp>0 && dist(t.x,t.y,e.x,e.y)<=R*1.4).sort((a,b)=>dist(t.x,t.y,a.x,a.y)-dist(t.x,t.y,b.x,b.y)).slice(0,n);
     for(const e of near){ beams.push({x1:t.x,y1:t.y,x2:e.x,y2:e.y,life:.14,color:'purple'}); damage(e,dmg,false,t); if(L5)e.stunUntil=Math.max(e.stunUntil||0,now()+0.4); } sfx('zap'); }
-  else if(t.type==='bomb'){ const n=L5?5:3, live=enemies.filter(e=>e.hp>0);
-    for(let k=0;k<n;k++){ const e=live.length?live[Math.floor(rand(0,live.length))]:null; const tx=e?e.x:t.x+rand(-120,120), ty=e?e.y:t.y+rand(-120,120);
+  else if(t.type==='bomb'){ const n=L5?5:3, live=enemies.filter(e=>e.hp>0 && dist(t.x,t.y,e.x,e.y)<=s.range);   // Carpet Bomb stays IN RANGE
+    for(let k=0;k<n;k++){ const e=live.length?live[Math.floor(rand(0,live.length))]:null;
+      let tx,ty; if(e){ tx=e.x; ty=e.y; } else { const a=rand(0,6.283), rr=rand(0,s.range); tx=t.x+Math.cos(a)*rr; ty=t.y+Math.sin(a)*rr; }   // fallback: random spot within range
       bombs.push({x:tx,y:ty,fuse:1.2,dmg:(s.bombDmg||300)*0.5*(L5?1.5:1),R:(s.bombR||110)*0.8,fire:(s.fire||0)*(L5?1.3:1),fireT:s.fireT||0,owner:t}); } sfx('place'); }
   else if(t.type==='psyche'){ const rad=R*(L5?1.3:1), dur=L5?3:2;
     for(const e of enemies){ if(e.hp>0 && dist(t.x,t.y,e.x,e.y)<=rad){ if(!psycheResist(e)){ e.holdUntil=now()+dur; if(e.boss)e.psycheImmuneUntil=e.holdUntil+10; if(L5)damage(e,(s.dmg*2)||40,false,t); } else psycheResistCue(e); } } psychePulse(t); }
@@ -1112,6 +1121,20 @@ function towerSpecial(t){
     t.orbSpin=t.orbSpin||0; sfx('psyche'); for(let k=0;k<12;k++)muzzle(t.x,t.y,rand(0,6.283),L5?'#fff':col('red')); }
 }
 // Orbital Lances — rotate the ring each frame; an orb that touches an enemy detonates in a blast and is spent.
+// a laser-orb detonation: a bright core flash, an expanding red shockwave ring, and hot shrapnel
+function orbBlast(x,y,blastR,L5){
+  const c = L5?'#ffffff':'#ff3b4a';
+  explosion(x,y,blastR*0.7,c);
+  bursts.push({x,y,t:0,dur:0.32,r0:blastR*0.2,r1:blastR*1.15,color:L5?'#fff':'#ff3b4a',w:L5?5:4});
+  bursts.push({x,y,t:0,dur:0.42,r0:blastR*0.1,r1:blastR*0.85,color:'#ffb0b8',w:2});
+  for(let i=0;i<16;i++){ const a=rand(0,6.283),sp=rand(80,blastR*7);
+    parts.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:rand(.25,.5),max:.5,c:i%2?(L5?'#fff':'#ff5a6a'):'#ffd0d4',sz:rand(2,5),g:20}); }
+  shake=Math.max(shake, L5?6:4);
+}
+function updateBursts(dt){ for(const b of bursts) b.t+=dt; bursts=bursts.filter(b=>b.t<b.dur); }
+function drawBursts(){ for(const b of bursts){ const p=b.t/b.dur, r=b.r0+(b.r1-b.r0)*p;
+  ctx.save(); ctx.globalAlpha=(1-p)*0.9; ctx.strokeStyle=b.color; ctx.lineWidth=b.w*(1-p*0.5); ctx.shadowBlur=14; ctx.shadowColor=b.color;
+  ctx.beginPath(); ctx.arc(b.x,b.y,r,0,6.283); ctx.stroke(); ctx.restore(); ctx.globalAlpha=1; } }
 function updateLaserOrbs(t,g){ if(!t.orbs||!t.orbs.length)return;
   const L5=t.level>=5, s=stats(t), orbR=46+t.level*3, spin=L5?2.8:2.0;
   t.orbSpin=(t.orbSpin||0)+g*spin;
@@ -1119,7 +1142,7 @@ function updateLaserOrbs(t,g){ if(!t.orbs||!t.orbs.length)return;
   for(const orb of t.orbs){ if(!orb.alive)continue;
     const ang=t.orbSpin+orb.a; orb.x=t.x+Math.cos(ang)*orbR; orb.y=t.y+Math.sin(ang)*orbR;
     for(const e of enemies){ if(e.hp>0 && dist(orb.x,orb.y,e.x,e.y) < hitR+e.r*0.6){
-      explosion(orb.x,orb.y,blastR*0.8,L5?'#fff':col('red'));
+      orbBlast(orb.x,orb.y,blastR,L5);   // cool red laser detonation
       for(const en of enemies){ if(en.hp>0 && dist(orb.x,orb.y,en.x,en.y)<=blastR){ damage(en,dmg,false,t);
         if(L5){ en.fire=Math.max(en.fire||0,s.dmg*0.9); en.fireUntil=now()+1.4; en.fireOwner=t; } } }
       orb.alive=false; break; } }
@@ -1273,6 +1296,7 @@ function update(dt){
   updateCam(dt);   // zoom eases toward the current world size every frame
   updatePac(dt);       // Pac-Man moves in real time regardless of the state gates below
   updatePickups(dt);   // loot spawns during combat, expires, and is collected on contact
+  updateBursts(dt);    // expanding shockwave rings (laser-orb detonations)
   if(state==='ready'||state==='bosspick'||state==='over'){ updateFX(dt); return; }
   if(state==='idle'){
     if(armed){ countdown-=dt;   // clock only runs once you've placed your first tower — a beat to look around
@@ -1340,7 +1364,7 @@ function update(dt){
   meteors=meteors.filter(m=>m.prog<1.5);
   // wave complete?
   // Boss solo phase: once its escorts are dead, ramp the speed one step every 5s up to the max
-  const bossSolo = waveActive && (wave%5===0) && spawnQueue.length===0 && enemies.length>0 && enemies.every(e=>e.boss);
+  const bossSolo = waveActive && spawnQueue.length===0 && enemies.length>0 && enemies.every(e=>e.boss);   // any leftover-boss situation ramps up
   if(bossSolo){ bossRampT-=dt;
     if(bossRampT<=0 && speedIdx<SPEEDS.length-1){ setSpeed(speedIdx+1); bossRampT=5;
       texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.2,txt:'▶▶ '+Math.round(SPEEDS[speedIdx]/1.4*100)+'% SPEED',color:col('cyan'),life:1.4,vy:-14,sz:22}); } }
@@ -1430,6 +1454,7 @@ function render(){
   // enemies
   for(const e of enemies)drawEnemy(e);
   for(const t of towers) if(t.orbs&&t.orbs.length) drawLaserOrbs(t);   // Orbital Lances over the ghosts
+  drawBursts();    // laser-orb shockwave rings
   drawPickups();   // glowing Pac-Man loot
   drawPac();       // Pac-Man on top of everything
   drawMeteors();   // ☄ meteors streak down over the field
@@ -1737,6 +1762,11 @@ function drawSpecialAura(e){
 }
 // on fire — flickering flame tongues around a burning enemy (set ablaze by a Demolition blast). Absolute coords
 // so it renders for EVERY enemy type (drawn behind the body so the flames appear to lick up around it).
+// Pac-Man's power-mode mark — a pulsing gold hex-ring so you can spot the +15%-damage bosses/specials
+function drawVulnAura(e){ if(!(e.vulnUntil>now()))return; const T=now(), R=e.r+8;
+  ctx.save(); ctx.globalAlpha=.5+.4*Math.abs(Math.sin(T*6)); ctx.strokeStyle=col('gold'); ctx.lineWidth=2.5; ctx.shadowBlur=12; ctx.shadowColor=col('gold');
+  ctx.beginPath(); for(let i=0;i<6;i++){ const a=T*1.5 + i/6*6.283, px=e.x+Math.cos(a)*R, py=e.y+Math.sin(a)*R; i?ctx.lineTo(px,py):ctx.moveTo(px,py); } ctx.closePath(); ctx.stroke();
+  ctx.globalAlpha=1; ctx.shadowBlur=0; ctx.restore(); }
 function drawFireAura(e){ if(!(e.fireUntil>now()))return; const T=now(), R=e.r;
   ctx.save(); ctx.shadowBlur=14; ctx.shadowColor='#ff5a2a';
   // faint ember glow so the whole minion reads as burning
@@ -1754,7 +1784,7 @@ function drawEnemy(e){
     for(let k=0;k<4;k++){ const a=t*3+k*1.5708; ctx.globalAlpha=0.75; ctx.fillStyle='#e6c3ff';
       ctx.beginPath(); ctx.arc(e.x+Math.cos(a)*(e.r+7),e.y+Math.sin(a)*(e.r+7),2,0,6.283); ctx.fill(); }
     ctx.restore(); }
-  if(!e.thumb){ drawSpecialAura(e); drawFireAura(e); }   // cosmetic auras (skipped on Bestiary thumbnails)
+  if(!e.thumb){ drawSpecialAura(e); drawFireAura(e); drawVulnAura(e); }   // cosmetic auras (skipped on Bestiary thumbnails)
   if(e.exploder){ drawPhantom(e); return; }
   if(e.froster){ drawFroster(e); return; }
   if(e.jolt){ drawSpectre(e,'#c79bff','#5a1fd6','#3a0a6e','SURGE','⚡'); return; }
@@ -2350,7 +2380,14 @@ document.getElementById('guideOverlay').addEventListener('click',ev=>{ if(ev.tar
 
 // ---- Patch notes — the whole build history, newest on top (curated by hand as we build) ----
 const PATCH_NOTES=[
-  {v:'00.12', tag:'current', t:'Pac-Man rework · ability nerfs · visible meteors', items:[
+  {v:'00.13', tag:'current', t:'Pac marks bosses · Demolition range fix · laser blasts · fixes', items:[
+    'Pac-Man\'s power mode now lasts 15s (was 30). While powered, running through a boss/special mob MARKS it (⤫ gold hex-glow) → it takes +15% damage for 8s. He still can\'t eat them, but now he softens them up.',
+    'Demolition FIXED: its Carpet Bomb (Lv3+) was dropping bombs anywhere on the map — now it only bombs within the tower\'s range, like everything else. No more full-screen demo coverage.',
+    'Laser Orbital Lances now DETONATE with a proper red blast — a bright core, an expanding shockwave ring, and hot shrapnel — instead of silently vanishing.',
+    'Surprise bosses (from Pac\'s OH-SHIT pickup) no longer give Boss Credits — only the real wave bosses at 5/10/15/20/25 do.',
+    'Speed auto-ramp fixed: ANY time only bosses are left on the field (not just on ×5 waves), the game accelerates up to 250% to help you finish them.',
+  ]},
+  {v:'00.12', t:'Pac-Man rework · ability nerfs · visible meteors', items:[
     'Pac-Man plays for real now: ghosts KILL him on contact (he goes down, then respawns after 8s at center). No more free-eating everything.',
     'Grab a ★ POWER-STAR pickup to enter a 30s gobble mode — flashing, invincible, and able to EAT normal mobs (bosses + special mobs are immune, like the arcade). Star mode blinks as it runs out.',
     'Nuke and Freeze (Stasis) cost more kills to recharge (Nuke 90→150, Stasis 40→85) — they were too strong to spam.',
