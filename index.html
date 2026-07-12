@@ -397,7 +397,7 @@
   </div>
   <div class="panel">
     <h1>SHOEMOCKER</h1>
-    <div class="verline" id="verLine" title="Version · build commit">v00.15 · <span id="buildSha">aba0899</span></div>
+    <div class="verline" id="verLine" title="Version · build commit">v00.16 · <span id="buildSha">fdd340f</span></div>
     <button class="btn go" id="waveBtn">▶ START WAVE 1</button>
     <div class="card">
       <h2>Global Buffs — from bosses</h2>
@@ -627,7 +627,16 @@ function updatePac(dt){
       else { pacDie(); return; }   // no power → the ghost gets him
     }
   }
+  // Pac-Man REPAIRS towers: run into a Phantom-damaged tower to kick off a 10s heal (it finishes on its own)
+  for(const t of towers){ if(t.hp<t.maxhp && dist(pac.x,pac.y,t.x,t.y) < 32){
+    if(!(t.healUntil>now())){ texts.push({x:t.x,y:t.y-22,txt:'🔧 REPAIRING',color:col('lime'),life:1.2,vy:-16,sz:12}); sfx('up'); }
+    t.healUntil=now()+10; } }
 }
+// tick every repairing tower (real-time, so it fills a full bar in ~10s regardless of game speed) + heal sparkles
+function updateTowerHeal(dt){ for(const t of towers){ if(t.healUntil && now()<t.healUntil){
+  t.hp=Math.min(t.maxhp, t.hp + (t.maxhp/10)*dt);
+  if(Math.random()<dt*8) parts.push({x:t.x+rand(-11,11),y:t.y+rand(-4,8),vx:rand(-6,6),vy:rand(-42,-18),life:.8,max:.8,c:col('lime'),sz:rand(2,4),g:-12});
+  if(t.hp>=t.maxhp){ t.healUntil=0; texts.push({x:t.x,y:t.y-22,txt:'✓ REPAIRED',color:col('lime'),life:1.2,vy:-16,sz:12}); } } } }
 function pacDie(){ pac.alive=false; pac.respawn=PAC_RESPAWN; pac.power=0; pac.moving=false;
   shake=Math.max(shake,10); sfx('nope');
   for(let i=0;i<22;i++){ const a=rand(0,6.283),sp=rand(40,190); parts.push({x:pac.x,y:pac.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:.6,max:.6,c:i%2?'#ffe23a':'#ff5a6a',sz:rand(2,5),g:30}); }
@@ -936,17 +945,17 @@ function startWave(){
   }
   // Special enemies unlock as you beat each boss, then spawn every wave after. Phantom/Frostbite are kept RARE
   // (only a fraction of lanes get one); Surge/Hexling are a bit more common.
-  if(wave>=6)  injectSpecial('exploder', 0.34);   // Phantom  — after boss 1 (rare)
-  if(wave>=11) injectSpecial('froster', 0.34);    // Frostbite — after boss 2 (rare)
-  if(wave>=16) injectSpecial('jolt', 0.5);        // Surge     — after boss 3
-  if(wave>=21) injectSpecial('hex', 0.5);         // Hexling   — after boss 4
+  if(wave>=6)  injectSpecial('exploder', 0.7);    // Phantom  — after boss 1
+  if(wave>=11) injectSpecial('froster', 0.7);     // Frostbite — after boss 2
+  if(wave>=16) injectSpecial('jolt', 1.0);        // Surge     — after boss 3
+  if(wave>=21) injectSpecial('hex', 1.0);         // Hexling   — after boss 4
   if(boss) spawnQueue.push({type:'boss', lane:lanes.length-1, hpMul:hpScale*(1+wave*0.06), delay:1.4});
   spawnT=0.4;
   refreshWaveBtn();
 }
-function injectSpecial(type, frac){   // convert grunts to specials — DOUBLED density, spread across random lanes
+function injectSpecial(type, frac){   // convert grunts to specials — CRANKED WAY up ("a shit load")
   const grunts=spawnQueue.map((s,k)=>s.type==='grunt'?k:-1).filter(k=>k>=0).sort(()=>Math.random()-.5);
-  const n=Math.min(grunts.length, Math.max(2, Math.round(lanes.length*(frac||1)*2)));   // ×2 vs the old per-lane count
+  const n=Math.min(grunts.length, Math.max(3, Math.round(lanes.length*(frac||1)*3)));   // ×3 per lane
   for(let i=0;i<n;i++) spawnQueue[grunts[i]].type=type;
 }
 function startIntro(){
@@ -1309,6 +1318,7 @@ function update(dt){
   updatePac(dt);       // Pac-Man moves in real time regardless of the state gates below
   updatePickups(dt);   // loot spawns during combat, expires, and is collected on contact
   updateBursts(dt);    // expanding shockwave rings (laser-orb detonations)
+  updateTowerHeal(dt); // Pac-Man tower repairs tick in real time
   if(state==='ready'||state==='bosspick'||state==='over'){ updateFX(dt); return; }
   if(state==='idle'){
     if(armed){ countdown-=dt;   // clock only runs once you've placed your first tower — a beat to look around
@@ -1697,6 +1707,13 @@ function drawTower(t){
       ctx.beginPath(); ctx.arc(t.x,t.y,rad,0,6.283); ctx.stroke();
       ctx.globalAlpha=0.16*pl; ctx.fillStyle=aura; ctx.beginPath(); ctx.arc(t.x,t.y,rad,0,6.283); ctx.fill();
       ctx.restore(); } }
+  // Pac-Man repair aura — pulsing green ring + a rising cross while healing
+  if(t.healUntil>now()){ const nowT=now(), rad=sz*0.72+8, pl=0.5+0.5*Math.abs(Math.sin(nowT*7));
+    ctx.save(); ctx.strokeStyle=col('lime'); ctx.lineWidth=2.5; ctx.shadowBlur=16; ctx.shadowColor=col('lime'); ctx.globalAlpha=0.85*pl;
+    ctx.beginPath(); ctx.arc(t.x,t.y,rad,0,6.283); ctx.stroke();
+    const cy=t.y-sz/2-16-((nowT*22)%14); ctx.lineWidth=3; ctx.globalAlpha=0.9;
+    ctx.beginPath(); ctx.moveTo(t.x,cy-4); ctx.lineTo(t.x,cy+4); ctx.moveTo(t.x-4,cy); ctx.lineTo(t.x+4,cy); ctx.stroke();
+    ctx.restore(); ctx.globalAlpha=1; }
   ctx.save(); ctx.translate(t.x+jx,t.y+jy);
   ctx.shadowBlur=8+t.level*2; ctx.shadowColor=c;
   drawTowerBody(t.type, sz, c, t.angle||0);
@@ -2398,7 +2415,11 @@ document.getElementById('guideOverlay').addEventListener('click',ev=>{ if(ev.tar
 
 // ---- Patch notes — the whole build history, newest on top (curated by hand as we build) ----
 const PATCH_NOTES=[
-  {v:'00.15', tag:'current', t:'Connected lanes — no more "no man\'s land"', items:[
+  {v:'00.16', tag:'current', t:'Pac-Man repairs towers · way more specials', items:[
+    'Pac-Man can now REPAIR towers! Run him into a Phantom-damaged tower and it kicks off a 10-second heal that refills its health on its own — with a pulsing green repair aura + rising cross so you can see it working.',
+    'Special monsters cranked WAY up (Phantoms/Frostbites/Surges/Hexlings spawn far more often) — chaos mode. Let\'s see what happens.',
+  ]},
+  {v:'00.15', t:'Connected lanes — no more "no man\'s land"', items:[
     'New streams no longer spawn off isolated in a corner. Each added lane now MUST intersect the existing path web at least once, and tries to keep a spawn/exit within ~3 tiles of an existing one.',
     'The generator now tries every direction and picks the best-connected — so it naturally favors lanes that weave into the map (verified: 0 isolated lanes over dozens of expansions).',
   ]},
