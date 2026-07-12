@@ -388,7 +388,7 @@
         <button class="tbtn" data-m="weak">Weak</button>
       </div>
       <button class="haste" id="hasteBtn" data-key="Z" title="+60% attack speed · recharges by kills · [Z]">⚡ OVERDRIVE</button>
-      <button class="phantom" id="phantomBtn" data-key="X" title="SNIPE — hover a mob and press X: every tower fires one hard shot at it from any range (else the toughest enemy) · unlocks at boss 10" style="display:none">🎯 SNIPE</button>
+      <button class="phantom" id="phantomBtn" data-key="X" title="SNIPE — E-lock a mob, then press X: every tower fires one hard shot at your locked target from any range (else the toughest enemy) · unlocks at boss 10" style="display:none">🎯 SNIPE</button>
       <button class="reveal" id="revealBtn" data-key="C" title="Reveal the ghost routes for 10s · unlocks at boss 5 · [C]" style="display:none">🗺 REVEAL</button>
       <button class="nuke" id="nukeBtn" data-key="V" title="Vaporize every normal mob (specials + bosses survive) · unlocks at boss 15 · [V]" style="display:none">☢ NUKE</button>
       <button class="stasis" id="stasisBtn" data-key="B" title="Freeze EVERY enemy for 4s · unlocks at boss 20 · [B]" style="display:none">⏳ STASIS</button>
@@ -397,7 +397,7 @@
   </div>
   <div class="panel">
     <h1>SHOEMOCKER</h1>
-    <div class="verline" id="verLine" title="Version · build commit">v00.21 · <span id="buildSha">0ac2bca</span></div>
+    <div class="verline" id="verLine" title="Version · build commit">v00.22 · <span id="buildSha">580d255</span></div>
     <button class="btn go" id="waveBtn">▶ START WAVE 1</button>
     <div class="card">
       <h2>Global Buffs — from bosses</h2>
@@ -2256,9 +2256,8 @@ function updatePhantomBtn(){ if(!phantomUnlocked)return; const ch=Math.min(PHUNT
 function firePhantom(){ if(!phantomUnlocked)return; if(kills-phantomMark<PHUNT_KILLS) return;
   const live=enemies.filter(e=>e.hp>0); if(!live.length){ sfx('nope'); return; }
   audioInit(); phantomMark=kills; sfx('zap'); shake=Math.max(shake,6);
-  // target: whatever your MOUSE is hovering over first, then an E-locked focus target, else the toughest enemy
-  const hov=enemyUnderCursor();
-  const tgt = (hov&&hov.hp>0) ? hov : (focusHeld&&focusEnemy&&focusEnemy.hp>0) ? focusEnemy : live.reduce((a,b)=>b.hp>a.hp?b:a);
+  // target: your E-locked focus target first, else the toughest enemy on the board
+  const tgt = (focusHeld&&focusEnemy&&focusEnemy.hp>0) ? focusEnemy : live.reduce((a,b)=>b.hp>a.hp?b:a);
   snipeFx={x:tgt.x,y:tgt.y,t:0,dur:0.7};
   const SNIPE_MULT=1.6;   // each shot hits harder than a normal attack — it's a precision burst
   for(const t of towers){ if(tgt.hp<=0)break; const s=stats(t); let dmg, crit=false;
@@ -2486,8 +2485,11 @@ document.getElementById('guideOverlay').addEventListener('click',ev=>{ if(ev.tar
 
 // ---- Patch notes — the whole build history, newest on top (curated by hand as we build) ----
 const PATCH_NOTES=[
-  {v:'00.21', tag:'current', t:'Snipe targets your cursor · Reveal shorter', items:[
-    'Snipe now targets whatever your MOUSE is hovering over — point at a mob and press X to focus every tower on it (falls back to an E-locked target, then the toughest enemy). Each snipe shot also hits 1.6× harder now.',
+  {v:'00.22', tag:'current', t:'Snipe uses your E-locked target', items:[
+    'Snipe now fires at your E-locked FOCUS target (press E over a mob to lock it, then X) — every tower snipes that mob from any range. Falls back to the toughest enemy if nothing is locked.',
+  ]},
+  {v:'00.21', t:'Snipe punch-up · Reveal shorter', items:[
+    'Snipe shots hit 1.6× harder.',
     'Reveal Path duration halved to 5s.',
   ]},
   {v:'00.20', t:'Phantom Hunt → SNIPE', items:[
@@ -2612,7 +2614,7 @@ const KEYHINTS=[
   ['guideBtn','Monster Guide','M'],
   ['patchBtn','Patch notes — the whole build history',null],
   ['hasteBtn','+60% attack speed · recharges by kills','Z'],
-  ['phantomBtn','SNIPE — hover a mob & press X: every tower snipes it once from any range · unlocks at boss 10','X'],
+  ['phantomBtn','SNIPE — E-lock a mob, then X: every tower snipes your locked target once from any range · unlocks at boss 10','X'],
   ['revealBtn','Reveal the ghost routes for 10s · unlocks at boss 5','C'],
   ['nukeBtn','Vaporize every normal mob (specials + bosses survive) · unlocks at boss 15','V'],
   ['stasisBtn','Freeze EVERY enemy for 4s · unlocks at boss 20','B'],
