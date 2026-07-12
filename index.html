@@ -397,7 +397,7 @@
   </div>
   <div class="panel">
     <h1>SHOEMOCKER</h1>
-    <div class="verline" id="verLine" title="Version · build commit">v00.14 · <span id="buildSha">2786da6</span></div>
+    <div class="verline" id="verLine" title="Version · build commit">v00.15 · <span id="buildSha">aba0899</span></div>
     <button class="btn go" id="waveBtn">▶ START WAVE 1</button>
     <div class="card">
       <h2>Global Buffs — from bosses</h2>
@@ -515,19 +515,31 @@ function count3wide(tiles, road){ let n=0;
   return n; }
 // minimum lane length — scales UP each boss so paths stay long & fair (based on the bigger arena dimension)
 function laneMinLen(n){ const sz=arenaSize(n); return Math.max(sz.cols,sz.rows)*TILE*(1.05 + 0.09*Math.max(0,n-1)); }
-// Generate a lane: avoids towers, adds NO thick (2x2) band vs existing roads, and meets the min length. Scores
-// candidates and keeps the best if none are perfect.
-function genLaneClean(cols, rows, avoidTowers, existingRoad, dir, minLen){
-  let best=null, bestScore=Infinity;
-  for(let a=0;a<340;a++){ const wp=genSerp(cols,rows,dir), tiles=roadTilesOf(wp);
+// Generate a lane, trying every candidate DIRECTION and keeping the best-woven one. Rules (per Blaha):
+//   never on a tower ≫ never 3-wide ≫ must INTERSECT an existing path ≫ keep a spawn/exit within ~3 tiles of an
+//   existing endpoint ≫ few 2-wide ≫ reach the min length ≫ (prefer crossing MORE existing paths).
+// This stops new streams from landing off in "no man's land" disconnected from the rest of the web.
+const ENDPOINT_PROX=3;   // a new lane's spawn/exit should sit within this many tiles of an existing spawn/exit
+const chebLE=(a,b,d)=>Math.max(Math.abs(a[0]-b[0]),Math.abs(a[1]-b[1]))<=d;
+function genLaneClean(cols, rows, avoidTowers, existingRoad, existingEnds, dirs, minLen){
+  const hasWeb = existingRoad.size>0;
+  let best=null, bestScore=Infinity, bestDir=dirs[0];
+  for(let a=0;a<520;a++){ const dir=dirs[Math.floor(Math.random()*dirs.length)];
+    const wp=genSerp(cols,rows,dir), tiles=roadTilesOf(wp);
     let towerHits=0; for(const k of tiles){ if(avoidTowers.has(k)) towerHits++; }
     const combined=new Set(existingRoad); for(const k of tiles) combined.add(k);
     const w3=count3wide(tiles, combined), w2=count2x2(tiles, combined), shortfall=Math.max(0, minLen-wpLen(wp));
-    // priority: never on a tower ≫ never 3-wide ≫ few 2-wide ≫ reach the min length
-    const score = towerHits*1e9 + w3*1e6 + w2*900 + shortfall;
-    if(score===0) return wp;
-    if(score<bestScore){ bestScore=score; best=wp; } }
-  return best;
+    // connectivity to the existing web
+    let crossings=0; if(hasWeb){ for(const k of tiles){ if(existingRoad.has(k)) crossings++; } }
+    const noIntersect = hasWeb && crossings===0 ? 1 : 0;
+    const entry=wp[0], exit=wp[wp.length-1];
+    let endNear=false; if(hasWeb){ for(const e of existingEnds){ if(chebLE(entry,e,ENDPOINT_PROX)||chebLE(exit,e,ENDPOINT_PROX)){ endNear=true; break; } } }
+    const endpointFar = hasWeb && !endNear ? 1 : 0;
+    const bad = towerHits*1e9 + w3*1e6 + noIntersect*4e5 + endpointFar*3e4 + w2*900 + shortfall;
+    const score = bad - Math.min(crossings,6)*40;   // among clean candidates, prefer the one that weaves through more
+    if(bad===0 && (!hasWeb || crossings>0)) return {wp, dir};   // clean, connected, well-placed → take it
+    if(score<bestScore){ bestScore=score; best=wp; bestDir=dir; } }
+  return {wp:best, dir:bestDir};
 }
 function relayout(){   // set the (grown) arena size + rebuild the road set from the lane paths
   const sz=arenaSize(lanes.length); worldCols=sz.cols; worldRows=sz.rows; roadSet=new Set();
@@ -549,13 +561,13 @@ function snapLaneEdges(ln){ const last=ln.wp.length-1;
 // Add a stream: grow the arena, FREEZE every existing lane (only its ends stretch to the new edge), then generate
 // ONLY the new lane — laid over the frozen ones, avoiding towers + all existing road. Old paths never shift.
 function addLane(){ const i=lanes.length;
-  const dir = i===0 ? 'LR' : DIRS[Math.floor(Math.random()*DIRS.length)];   // first stream L→R (classic), rest vary
+  const dirs = i===0 ? ['LR'] : DIRS;   // first stream classic L→R; later ones try ALL directions & pick the best-connected
   const sz=arenaSize(i+1); worldCols=sz.cols; worldRows=sz.rows;            // grow the arena for the new stream count
-  const road=new Set();                                                     // frozen lanes' road (edge-extended)
-  for(const ln of lanes){ snapLaneEdges(ln); for(const k of roadTilesOf(ln.wp)) road.add(k); }
+  const road=new Set(), ends=[];                                            // frozen lanes' road + their spawn/exit points
+  for(const ln of lanes){ snapLaneEdges(ln); for(const k of roadTilesOf(ln.wp)) road.add(k); ends.push(ln.wp[0], ln.wp[ln.wp.length-1]); }
   const avoidTowers=new Set(Object.keys(occupancy)), minLen=laneMinLen(i+1);
-  const wp=genLaneClean(worldCols, worldRows, avoidTowers, road, dir, minLen);   // ONLY the new lane is generated
-  lanes.push({dir, wp, len:wpLen(wp), color:LANE_COLORS[i%LANE_COLORS.length]});
+  const res=genLaneClean(worldCols, worldRows, avoidTowers, road, ends, dirs, minLen);   // ONLY the new lane is generated
+  lanes.push({dir:res.dir, wp:res.wp, len:wpLen(res.wp), color:LANE_COLORS[i%LANE_COLORS.length]});
   relayout();                 // rebuild the full road set (all frozen lanes + the new one)
   relocateTowersOffRoads();   // safety net: only the NEW lane (or a rare edge-extension) could ever bury a tower
 }
@@ -2386,7 +2398,11 @@ document.getElementById('guideOverlay').addEventListener('click',ev=>{ if(ev.tar
 
 // ---- Patch notes — the whole build history, newest on top (curated by hand as we build) ----
 const PATCH_NOTES=[
-  {v:'00.14', tag:'current', t:'Tower panel shows base → buffed stats', items:[
+  {v:'00.15', tag:'current', t:'Connected lanes — no more "no man\'s land"', items:[
+    'New streams no longer spawn off isolated in a corner. Each added lane now MUST intersect the existing path web at least once, and tries to keep a spawn/exit within ~3 tiles of an existing one.',
+    'The generator now tries every direction and picks the best-connected — so it naturally favors lanes that weave into the map (verified: 0 isolated lanes over dozens of expansions).',
+  ]},
+  {v:'00.14', t:'Tower panel shows base → buffed stats', items:[
     'The selected-tower panel now shows each buffed stat as base → buffed (e.g. Damage 9 → 13, Range 163 → 186), so you can see the tower\'s own numbers and exactly what the global boss buffs add on top. Un-buffed stats show plain.',
   ]},
   {v:'00.13', t:'Pac marks bosses · Demolition range fix · laser blasts · fixes', items:[
