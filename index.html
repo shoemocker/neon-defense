@@ -397,7 +397,7 @@
   </div>
   <div class="panel">
     <h1>SHOEMOCKER</h1>
-    <div class="verline" id="verLine" title="Version · build commit">v00.18 · <span id="buildSha">1f78cac</span></div>
+    <div class="verline" id="verLine" title="Version · build commit">v00.19 · <span id="buildSha">588c20d</span></div>
     <button class="btn go" id="waveBtn">▶ START WAVE 1</button>
     <div class="card">
       <h2>Global Buffs — from bosses</h2>
@@ -873,6 +873,16 @@ const DIFFS=[
   {name:'Come Get Some', hp:2.0, coins:450, guy:'brute', cry:'COME GET SOME!',   c1:'#5bbd5f'},
   {name:"Damn I'm Good", hp:2.5, coins:650, guy:'demon', cry:'OH SHIT, SON…',    c1:'#c02fff'},
 ];
+// The 5 REAL bosses — the herald pictures at waves 5/10/15/20/25 now WALK the path as these characters.
+// `guy` = which art to draw, `c1` = glow/label colour, `hpMul` scales the base boss HP, `r`=size, `spd`=walk speed.
+const BOSSES=[
+  {guy:'baby',   name:'THE BABY',   c1:'#ff9ecb', cry:'NAP TIME, BABY?',    hpMul:1.3, r:42, spd:34},
+  {guy:'kool',   name:'THE KOOL-AID KING', c1:'#ff3b47', cry:'OH YEAH!',    hpMul:1.9, r:46, spd:34},
+  {guy:'brute',  name:'THE BRUTE',  c1:'#5bbd5f', cry:'COME GET SOME!',     hpMul:2.6, r:50, spd:30},
+  {guy:'demon',  name:'THE DEMON',  c1:'#c02fff', cry:'OH SHIT, SON…',      hpMul:3.4, r:54, spd:32},
+  {guy:'reaper', name:'THE END',    c1:'#b9b0ff', cry:'THE EXPEDITION ENDS.', hpMul:4.6, r:60, spd:28},
+];
+const bossFor = w => BOSSES[(Math.round(w/5)-1) % BOSSES.length];   // wave 5→baby, 10→kool … 25→reaper, then cycles (endless)
 function reset(){
   coins=220; lives=20; wave=0; kills=0; bossCoins=0; towersLost=0; bossTowersUnlocked=false;
   towers=[]; enemies=[]; projs=[]; beams=[]; parts=[]; texts=[]; bombs=[]; lasers=[];
@@ -949,7 +959,8 @@ function startWave(){
   if(wave>=11) injectSpecial('froster', 0.7);     // Frostbite — after boss 2
   if(wave>=16) injectSpecial('jolt', 1.0);        // Surge     — after boss 3
   if(wave>=21) injectSpecial('hex', 1.0);         // Hexling   — after boss 4
-  if(boss) spawnQueue.push({type:'boss', lane:lanes.length-1, hpMul:hpScale*(1+wave*0.06), delay:1.4});
+  if(boss){ const bd=bossFor(wave);   // the herald character now walks the path as a real boss
+    spawnQueue.push({type:'boss', lane:lanes.length-1, hpMul:hpScale*bd.hpMul, delay:1.4, bossKind:bd.guy, bossName:bd.name, bossColor:bd.c1, bossR:bd.r, bossSpeed:bd.spd}); }
   spawnT=0.4;
   refreshWaveBtn();
 }
@@ -960,9 +971,8 @@ function injectSpecial(type, frac){   // convert grunts to specials — CRANKED 
 }
 function startIntro(){
   if(state!=='idle') return;
-  const bossNum=Math.round((wave+1)/5);              // bosses at 5/10/15/20…
-  introGuy=DIFFS[(bossNum-1)%DIFFS.length];           // cycle baby → Kool-Aid → brute → demon, boss by boss
-  state='intro'; introT=INTRO_T; sfx(introGuy.guy==='kool'?'koolaid':introGuy.guy);
+  introGuy=bossFor(wave+1);                           // the boss that's about to walk (baby/kool/brute/demon/reaper)
+  state='intro'; introT=INTRO_T; sfx(introGuy.guy==='kool'?'koolaid':(introGuy.guy==='reaper'?'phantom':introGuy.guy));
   // he bursts through — themed debris everywhere
   for(let i=0;i<48;i++){ const a=rand(0,6.283), sp=rand(90,420);
     parts.push({x:W/2,y:H/2,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:rand(.4,1),max:1,c:i%3?introGuy.c1:'#ffd23b',sz:rand(2,6),g:120}); }
@@ -985,6 +995,9 @@ function spawnEnemy(spec){
     exploder:!!b.exploder, froster:!!b.froster, jolt:!!b.jolt, hex:!!b.hex,
     explodeAt:(b.exploder||b.froster||b.jolt||b.hex)?rand(0.25,0.82):0, exploded:false,
     slowUntil:0, slowMul:1, dot:0, dotUntil:0, fire:0, fireUntil:0, flash:0, traveled:0, holdUntil:0, psycheImmuneUntil:0});
+  if(spec.bossKind){ const e=enemies[enemies.length-1];   // a real wave boss → walk as its herald character
+    e.bossKind=spec.bossKind; e.bossName=spec.bossName; if(spec.bossColor)e.color=spec.bossColor;
+    if(spec.bossR)e.r=spec.bossR; if(spec.bossSpeed)e.speed=spec.bossSpeed; }
   if(spec.type==='boss' && !spec.noBuff) offerBossBuff();   // pickup-spawned "surprise" bosses skip the reward pick
 }
 
@@ -1546,7 +1559,7 @@ function drawIntroGuy(){
   const S=H*0.27*s;   // scale the intro guy to the canvas so it stays big on any resolution
   ctx.save(); ctx.translate(W/2,H/2); ctx.rotate(Math.sin(now()*17)*0.03);
   ctx.globalAlpha=.30*s; ctx.fillStyle=d.c1; ctx.beginPath(); ctx.arc(0,0,S*1.3,0,6.283); ctx.fill(); ctx.globalAlpha=1;
-  if(d.guy==='kool') guyKool(S); else if(d.guy==='baby') guyBaby(S); else if(d.guy==='brute') guyBrute(S); else guyDemon(S);
+  if(d.guy==='kool') guyKool(S); else if(d.guy==='baby') guyBaby(S); else if(d.guy==='brute') guyBrute(S); else if(d.guy==='reaper') guyReaper(S); else guyDemon(S);
   ctx.restore();
   if(p>0.2 && p<0.92){
     ctx.save(); ctx.translate(W/2+S*0.55, H/2-S*0.82+Math.sin(now()*13)*3);
@@ -1607,6 +1620,31 @@ function guyDemon(S){
   ctx.fillStyle='#fff';
   ctx.beginPath(); ctx.moveTo(-S*0.2,S*0.14); ctx.lineTo(-S*0.12,S*0.34); ctx.lineTo(-S*0.04,S*0.14); ctx.closePath();
   ctx.moveTo(S*0.2,S*0.14); ctx.lineTo(S*0.12,S*0.34); ctx.lineTo(S*0.04,S*0.14); ctx.closePath(); ctx.fill();
+}
+function guyReaper(S){   // the final boss — a pale skull deep in a dark hood, eyes burning
+  ctx.fillStyle='#15121e'; ctx.shadowBlur=28; ctx.shadowColor='#b9b0ff';   // hooded cloak
+  ctx.beginPath(); ctx.moveTo(-S*0.62,S*0.55); ctx.quadraticCurveTo(-S*0.72,-S*0.72,0,-S*0.74); ctx.quadraticCurveTo(S*0.72,-S*0.72,S*0.62,S*0.55); ctx.closePath(); ctx.fill(); ctx.shadowBlur=0;
+  ctx.fillStyle='#05040a'; ctx.beginPath(); ctx.ellipse(0,-S*0.06,S*0.37,S*0.46,0,0,6.283); ctx.fill();   // hood shadow
+  ctx.fillStyle='#e9e6f5'; ctx.beginPath(); ctx.arc(0,-S*0.12,S*0.27,0,6.283); ctx.fill();                // skull
+  rr(-S*0.17,S*0.04,S*0.34,S*0.2,S*0.06); ctx.fill();                                                     // jaw
+  ctx.fillStyle='#7cf5c0'; ctx.shadowBlur=14; ctx.shadowColor='#7cf5c0';                                  // glowing eyes
+  ctx.beginPath(); ctx.arc(-S*0.1,-S*0.14,S*0.075,0,6.283); ctx.arc(S*0.1,-S*0.14,S*0.075,0,6.283); ctx.fill(); ctx.shadowBlur=0;
+  ctx.fillStyle='#0a0a12'; ctx.beginPath(); ctx.moveTo(0,-S*0.06); ctx.lineTo(-S*0.05,S*0.03); ctx.lineTo(S*0.05,S*0.03); ctx.closePath(); ctx.fill();   // nose
+  ctx.strokeStyle='#05040a'; ctx.lineWidth=Math.max(1,S*0.03); ctx.beginPath();                            // teeth
+  for(let i=-1;i<=1;i++){ ctx.moveTo(i*S*0.09,S*0.06); ctx.lineTo(i*S*0.09,S*0.22); } ctx.stroke();
+}
+// draw a real wave boss as its herald character, walking the path (menace ring + bob + hit-flash + freeze tint)
+function drawBossChar(e){
+  const R=e.r, S=R*1.5, t=now();
+  ctx.save(); ctx.translate(e.x,e.y);
+  ctx.globalAlpha=.35+.25*Math.sin(t*3); ctx.strokeStyle=e.color; ctx.lineWidth=2.5; ctx.shadowBlur=16; ctx.shadowColor=e.color;
+  ctx.beginPath(); ctx.arc(0,0,R+7+3*Math.sin(t*2),0,6.283); ctx.stroke(); ctx.globalAlpha=1; ctx.shadowBlur=0;
+  ctx.translate(0, Math.sin(t*3+e.x*0.01)*3);
+  const g=e.bossKind;
+  if(g==='kool') guyKool(S); else if(g==='baby') guyBaby(S); else if(g==='brute') guyBrute(S); else if(g==='reaper') guyReaper(S); else guyDemon(S);
+  if(e.flash>0){ ctx.globalAlpha=Math.min(.6,e.flash*4); ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(0,-S*0.05,S*0.72,0,6.283); ctx.fill(); ctx.globalAlpha=1; }
+  if(e.slowUntil>now()){ ctx.globalAlpha=.35; ctx.fillStyle=col('ice'); ctx.beginPath(); ctx.arc(0,-S*0.05,S*0.72,0,6.283); ctx.fill(); ctx.globalAlpha=1; }
+  ctx.restore();
 }
 // Each tower is drawn as its OWN little emplacement (centered at 0,0), tinted its theme colour `c`,
 // scaling with `sz`, with the barrel/nozzle rotating toward the target angle `ang`.
@@ -1819,7 +1857,10 @@ function drawEnemy(e){
   if(e.froster){ drawFroster(e); return; }
   if(e.jolt){ drawSpectre(e,'#c79bff','#5a1fd6','#3a0a6e','SURGE','⚡'); return; }
   if(e.hex){ drawSpectre(e,'#ff6bd0','#a01f7a','#4a0a3a','HEXLING','✖'); return; }
-  const c = e.flash>0 ? '#fff' : e.color, R=e.r;
+  const R=e.r;
+  if(e.boss && e.bossKind){ drawBossChar(e); }   // real wave boss → its herald character walks the path
+  else {
+  const c = e.flash>0 ? '#fff' : e.color;
   // eyes look toward the next waypoint
   let dx=1,dy=0; const wp=(lanes[e.lane]||lanes[0]).wp[e.wp];
   if(wp){ const tc=center(wp[0],wp[1]); const dd=Math.hypot(tc.x-e.x,tc.y-e.y); if(dd>0.5){ dx=(tc.x-e.x)/dd; dy=(tc.y-e.y)/dd; } }
@@ -1844,14 +1885,15 @@ function drawEnemy(e){
   if(e.slowUntil>now()){ ctx.strokeStyle=col('ice'); ctx.lineWidth=2.5; ctx.globalAlpha=.9;
     ctx.beginPath(); ctx.moveTo(-R,sk); ctx.lineTo(-R,cy); ctx.arc(0,cy,R,Math.PI,2*Math.PI); ctx.lineTo(R,sk); ctx.stroke(); ctx.globalAlpha=1; }
   ctx.restore();
+  }
   if(e.thumb) return;   // Bestiary thumbnail — no hp bar / label
   // hp bar
   const w=R*2, hpf=clamp(e.hp/e.maxhp,0,1);
   ctx.fillStyle='#000'; ctx.fillRect(e.x-w/2,e.y-R-10,w,4);
   ctx.fillStyle=hpf>.5?col('lime'):hpf>.25?col('gold'):col('red'); ctx.fillRect(e.x-w/2,e.y-R-10,w*hpf,4);
   if(e.boss){ ctx.textAlign='center';
-    ctx.fillStyle=col('mag'); ctx.font='900 10px monospace'; ctx.fillText('BOSS',e.x,e.y-R-16);
-    if(pendingBuff){ ctx.fillStyle=col('gold'); ctx.font='900 9px monospace'; ctx.fillText('★ '+pendingBuff.t,e.x,e.y-R-28); } }
+    ctx.fillStyle=e.bossColor||col('mag'); ctx.font='900 11px monospace'; ctx.fillText(e.bossName||'BOSS',e.x,e.y-R-16);
+    if(pendingBuff){ ctx.fillStyle=col('gold'); ctx.font='900 9px monospace'; ctx.fillText('★ '+pendingBuff.t,e.x,e.y-R-30); } }
 }
 function drawPhantom(e){
   const R=e.r, lane=lanes[e.lane]||lanes[0], charge=e.exploded?1:clamp(e.traveled/(e.explodeAt*lane.len),0,1);
@@ -2420,7 +2462,11 @@ document.getElementById('guideOverlay').addEventListener('click',ev=>{ if(ev.tar
 
 // ---- Patch notes — the whole build history, newest on top (curated by hand as we build) ----
 const PATCH_NOTES=[
-  {v:'00.18', tag:'current', t:'Surprise bosses don\'t stall the round · shorter star', items:[
+  {v:'00.19', tag:'current', t:'REAL BOSSES — the heralds now walk the path', items:[
+    'The boss pictures that herald every 5th wave are now ACTUAL bosses that walk the path! Wave 5 = The Baby, 10 = The Kool-Aid King, 15 = The Brute, 20 = The Demon, and 25 = a brand-new final boss, THE END (a hooded reaper).',
+    'Each boss is bigger, named on its health bar, and scales harder than the last. After wave 25 the roster cycles (endless) — distinct endless chaos comes later.',
+  ]},
+  {v:'00.18', t:'Surprise bosses don\'t stall the round · shorter star', items:[
     'Pac\'s surprise bosses (from the OH-SHIT pickup) no longer block wave-clear — the round advances as normal and the boss just lingers into the next wave.',
     'Pac-Man\'s star / gobble mode is now 7.5s (halved from 15).',
   ]},
