@@ -397,7 +397,7 @@
   </div>
   <div class="panel">
     <h1>SHOEMOCKER</h1>
-    <div class="verline" id="verLine" title="Version · build commit">v00.13 · <span id="buildSha">28a4001</span></div>
+    <div class="verline" id="verLine" title="Version · build commit">v00.14 · <span id="buildSha">2786da6</span></div>
     <button class="btn go" id="waveBtn">▶ START WAVE 1</button>
     <div class="card">
       <h2>Global Buffs — from bosses</h2>
@@ -2002,9 +2002,15 @@ function renderSel(){
   document.getElementById('selName').textContent=`${b.name}  ·  LV ${t.level}`;
   document.getElementById('selName').style.color=col(b.color);
   const survives=Math.ceil(clamp(t.hp/PHANTOM_DMG,0,99));   // Phantom hits it can still take
-  const rows=[['Damage',s.dmg.toFixed(0)],['Atk speed',s.rate.toFixed(2)+'/s'],
-    ['Crit chance',(s.crit*100).toFixed(0)+'%'],['Crit dmg','×'+s.critMult.toFixed(1)],
-    ['Range', s.laser?'∞ full screen':s.range.toFixed(0)],['Health',Math.round(t.hp)+' / '+Math.round(t.maxhp)],
+  // base tower stat → buffed value, so you can see exactly what the boss buffs add (buffs + their % are listed above)
+  const bv=(base,buffed)=> base===buffed ? buffed : `<span style="color:var(--faint)">${base}</span><span style="color:var(--gold)"> → ${buffed}</span>`;
+  const dmgV  = bv((s.dmg/(1+gb.dmg)).toFixed(0), s.dmg.toFixed(0));
+  const rateV = bv((s.rate/(1+gb.atkSpeed)).toFixed(2), s.rate.toFixed(2))+'/s';
+  const critV = bv(Math.max(0,(s.crit-gb.crit)*100).toFixed(0), (s.crit*100).toFixed(0))+'%';
+  const rngV  = s.laser ? '∞ full screen' : bv((s.range/(1+gb.range)).toFixed(0), s.range.toFixed(0));
+  const rows=[['Damage',dmgV],['Atk speed',rateV],
+    ['Crit chance',critV],['Crit dmg', gb.critDmg ? `<span style="color:var(--faint)">×${(s.critMult-gb.critDmg).toFixed(1)}</span><span style="color:var(--gold)"> → ×${s.critMult.toFixed(1)}</span>` : '×'+s.critMult.toFixed(1)],
+    ['Range', rngV],['Health',Math.round(t.hp)+' / '+Math.round(t.maxhp)],
     ['Phantom hits','🛡 '+survives]];
   if(s.laser)rows.push(['Beam width', Math.round(s.beamW)]);
   if(s.splash)rows.push(['Splash',s.splash]);
@@ -2380,7 +2386,10 @@ document.getElementById('guideOverlay').addEventListener('click',ev=>{ if(ev.tar
 
 // ---- Patch notes — the whole build history, newest on top (curated by hand as we build) ----
 const PATCH_NOTES=[
-  {v:'00.13', tag:'current', t:'Pac marks bosses · Demolition range fix · laser blasts · fixes', items:[
+  {v:'00.14', tag:'current', t:'Tower panel shows base → buffed stats', items:[
+    'The selected-tower panel now shows each buffed stat as base → buffed (e.g. Damage 9 → 13, Range 163 → 186), so you can see the tower\'s own numbers and exactly what the global boss buffs add on top. Un-buffed stats show plain.',
+  ]},
+  {v:'00.13', t:'Pac marks bosses · Demolition range fix · laser blasts · fixes', items:[
     'Pac-Man\'s power mode now lasts 15s (was 30). While powered, running through a boss/special mob MARKS it (⤫ gold hex-glow) → it takes +15% damage for 8s. He still can\'t eat them, but now he softens them up.',
     'Demolition FIXED: its Carpet Bomb (Lv3+) was dropping bombs anywhere on the map — now it only bombs within the tower\'s range, like everything else. No more full-screen demo coverage.',
     'Laser Orbital Lances now DETONATE with a proper red blast — a bright core, an expanding shockwave ring, and hot shrapnel — instead of silently vanishing.',
