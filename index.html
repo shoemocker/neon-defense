@@ -388,7 +388,7 @@
         <button class="tbtn" data-m="weak">Weak</button>
       </div>
       <button class="haste" id="hasteBtn" data-key="Z" title="+60% attack speed · recharges by kills · [Z]">⚡ OVERDRIVE</button>
-      <button class="phantom" id="phantomBtn" data-key="X" title="SNIPE — every tower fires one shot at the toughest enemy (or your focus target) from any range · unlocks at boss 10 · [X]" style="display:none">🎯 SNIPE</button>
+      <button class="phantom" id="phantomBtn" data-key="X" title="SNIPE — hover a mob and press X: every tower fires one hard shot at it from any range (else the toughest enemy) · unlocks at boss 10" style="display:none">🎯 SNIPE</button>
       <button class="reveal" id="revealBtn" data-key="C" title="Reveal the ghost routes for 10s · unlocks at boss 5 · [C]" style="display:none">🗺 REVEAL</button>
       <button class="nuke" id="nukeBtn" data-key="V" title="Vaporize every normal mob (specials + bosses survive) · unlocks at boss 15 · [V]" style="display:none">☢ NUKE</button>
       <button class="stasis" id="stasisBtn" data-key="B" title="Freeze EVERY enemy for 4s · unlocks at boss 20 · [B]" style="display:none">⏳ STASIS</button>
@@ -397,7 +397,7 @@
   </div>
   <div class="panel">
     <h1>SHOEMOCKER</h1>
-    <div class="verline" id="verLine" title="Version · build commit">v00.20 · <span id="buildSha">6e23a29</span></div>
+    <div class="verline" id="verLine" title="Version · build commit">v00.21 · <span id="buildSha">0ac2bca</span></div>
     <button class="btn go" id="waveBtn">▶ START WAVE 1</button>
     <div class="card">
       <h2>Global Buffs — from bosses</h2>
@@ -859,7 +859,7 @@ const HASTE_DUR=30, HASTE_KILLS=35, HASTE_MULT=1.6;
 let phantomUnlocked=false, phantomUntil=0, phantomMark=0;   // Phantom Hunt: appears once a Phantom kills a tower
 const PHUNT_DUR=10, PHUNT_KILLS=15;    // 10s of towers targeting ONLY Phantoms; recharge = 15 kills
 let revealUnlocked=false, revealUntil=0, revealMark=0;     // Reveal Path: unlocks at boss 5
-const REVEAL_DUR=10, REVEAL_KILLS=25; // shows the ghost routes for 10s; recharge = 25 kills
+const REVEAL_DUR=5, REVEAL_KILLS=25; // shows the ghost routes for 5s; recharge = 25 kills
 // Three boss-reward abilities unlocked at bosses 15 / 20 / 25:
 let nukeUnlocked=false, nukeMark=0;                        // ☢ NUKE (boss 15) — instant board-wide blast
 const NUKE_KILLS=150;   // raised — Nuke was too strong to fire so often
@@ -2256,13 +2256,17 @@ function updatePhantomBtn(){ if(!phantomUnlocked)return; const ch=Math.min(PHUNT
 function firePhantom(){ if(!phantomUnlocked)return; if(kills-phantomMark<PHUNT_KILLS) return;
   const live=enemies.filter(e=>e.hp>0); if(!live.length){ sfx('nope'); return; }
   audioInit(); phantomMark=kills; sfx('zap'); shake=Math.max(shake,6);
-  const tgt=(focusHeld&&focusEnemy&&focusEnemy.hp>0)?focusEnemy:live.reduce((a,b)=>b.hp>a.hp?b:a);
+  // target: whatever your MOUSE is hovering over first, then an E-locked focus target, else the toughest enemy
+  const hov=enemyUnderCursor();
+  const tgt = (hov&&hov.hp>0) ? hov : (focusHeld&&focusEnemy&&focusEnemy.hp>0) ? focusEnemy : live.reduce((a,b)=>b.hp>a.hp?b:a);
   snipeFx={x:tgt.x,y:tgt.y,t:0,dur:0.7};
+  const SNIPE_MULT=1.6;   // each shot hits harder than a normal attack — it's a precision burst
   for(const t of towers){ if(tgt.hp<=0)break; const s=stats(t); let dmg, crit=false;
     if(t.type==='bomb'){ dmg=(s.bombDmg||0)*0.6; }
     else if(t.type==='psyche'){ dmg=0; }
     else { const rd=rollDmg(s); dmg=rd.v; crit=rd.crit; }
-    if(dmg>0){ beams.push({x1:t.x,y1:t.y,x2:tgt.x,y2:tgt.y,life:.24,color:TOWER_TYPES[t.type].color}); damage(tgt,dmg,crit,t); } }
+    dmg*=SNIPE_MULT;
+    if(dmg>0){ beams.push({x1:t.x,y1:t.y,x2:tgt.x,y2:tgt.y,life:.28,color:TOWER_TYPES[t.type].color}); damage(tgt,dmg,crit,t); } }
   texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.14,txt:'🎯 SNIPE!',color:col('red'),life:1.6,vy:-16,sz:28}); updatePhantomBtn(); }
 phantomBtn.onclick=firePhantom;
 // ---- Reveal Path button ----
@@ -2482,7 +2486,11 @@ document.getElementById('guideOverlay').addEventListener('click',ev=>{ if(ev.tar
 
 // ---- Patch notes — the whole build history, newest on top (curated by hand as we build) ----
 const PATCH_NOTES=[
-  {v:'00.20', tag:'current', t:'Phantom Hunt → SNIPE', items:[
+  {v:'00.21', tag:'current', t:'Snipe targets your cursor · Reveal shorter', items:[
+    'Snipe now targets whatever your MOUSE is hovering over — point at a mob and press X to focus every tower on it (falls back to an E-locked target, then the toughest enemy). Each snipe shot also hits 1.6× harder now.',
+    'Reveal Path duration halved to 5s.',
+  ]},
+  {v:'00.20', t:'Phantom Hunt → SNIPE', items:[
     'Phantom Hunt is now SNIPE (still on X). Instead of a 10s phantoms-only mode, it\'s a single coordinated volley: EVERY tower fires one shot at the toughest enemy on the board (or your E-locked focus target) from ANY range. Great for bursting a boss.',
     'New crosshair-reticle graphics on the target + tracer beams from every tower. Recharges by kills, unlocks at boss 10.',
   ]},
@@ -2604,7 +2612,7 @@ const KEYHINTS=[
   ['guideBtn','Monster Guide','M'],
   ['patchBtn','Patch notes — the whole build history',null],
   ['hasteBtn','+60% attack speed · recharges by kills','Z'],
-  ['phantomBtn','SNIPE — every tower fires one shot at the toughest enemy from any range · unlocks at boss 10','X'],
+  ['phantomBtn','SNIPE — hover a mob & press X: every tower snipes it once from any range · unlocks at boss 10','X'],
   ['revealBtn','Reveal the ghost routes for 10s · unlocks at boss 5','C'],
   ['nukeBtn','Vaporize every normal mob (specials + bosses survive) · unlocks at boss 15','V'],
   ['stasisBtn','Freeze EVERY enemy for 4s · unlocks at boss 20','B'],
