@@ -397,7 +397,7 @@
   </div>
   <div class="panel">
     <h1>SHOEMOCKER</h1>
-    <div class="verline" id="verLine" title="Version · build commit">v00.11 · <span id="buildSha">e3374b8</span></div>
+    <div class="verline" id="verLine" title="Version · build commit">v00.12 · <span id="buildSha">cba9193</span></div>
     <button class="btn go" id="waveBtn">▶ START WAVE 1</button>
     <div class="card">
       <h2>Global Buffs — from bosses</h2>
@@ -586,37 +586,65 @@ let viewScale=1, camOffx=0, camOffy=0;
 const PAD=1;   // always keep a 1-tile border ring of blocks around the arena (so edge towers' arrows aren't clipped)
 function fitScale(){ return Math.min(W/((worldCols+2*PAD)*TILE), H/((worldRows+2*PAD)*TILE)); }
 // ---- Pac-Man (experimental) — WASD-driven, real-time (independent of game speed); chomps enemies he touches ----
+const PAC_RESPAWN=8, PAC_POWER=30;
+const isSpecial=e=>e.boss||e.exploder||e.froster||e.jolt||e.hex;   // bosses + special mobs — never edible
 function updatePac(dt){
   if(!pac || state==='over'||state==='bosspick'||state==='ready') return;
+  if(!pac.alive){ pac.respawn-=dt; if(pac.respawn<=0){ pac.alive=true; pac.power=0; pac.moving=false;
+      pac.x=worldCols*TILE/2; pac.y=worldRows*TILE/2;
+      texts.push({x:pac.x,y:pac.y-26,txt:'PAC-MAN RETURNS',color:col('gold'),life:1.6,vy:-16,sz:15}); } return; }
+  if(pac.power>0) pac.power-=dt;
   let mx=(pacKeys.d-pacKeys.a), my=(pacKeys.s-pacKeys.w);
   if(mx||my){ const L=Math.hypot(mx,my); mx/=L; my/=L; pac.dir=Math.atan2(my,mx); pac.moving=true;
     const pad=TILE*0.4;
     pac.x=clamp(pac.x+mx*pac.speed*dt, pad, worldCols*TILE-pad);
     pac.y=clamp(pac.y+my*pac.speed*dt, pad, worldRows*TILE-pad);
   } else pac.moving=false;
-  // chomp any enemy he runs into (specials/bosses included — it's experimental)
-  const R=16;
-  for(const e of enemies){ if(e.hp>0 && dist(pac.x,pac.y,e.x,e.y) < R+e.r*0.6){
-    e.hp=0; pac.eats++; killEnemy(e,null);
-    for(let i=0;i<8;i++){ const a=rand(0,6.283),sp=rand(40,150); parts.push({x:e.x,y:e.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:.4,max:.4,c:'#ffe23a',sz:rand(2,4),g:20}); }
-  } }
+  // collisions: powered = gobble NORMAL mobs (specials/bosses immune, no harm); un-powered = a ghost KILLS him
+  const R=16, powered=pac.power>0;
+  for(const e of enemies){ if(e.hp<=0)continue;
+    if(dist(pac.x,pac.y,e.x,e.y) < R+e.r*0.6){
+      if(powered){ if(!isSpecial(e)){ e.hp=0; pac.eats++; killEnemy(e,null);
+          for(let i=0;i<8;i++){ const a=rand(0,6.283),sp=rand(40,150); parts.push({x:e.x,y:e.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:.4,max:.4,c:'#ffe23a',sz:rand(2,4),g:20}); } } }
+      else { pacDie(); return; }   // no power → the ghost gets him
+    }
+  }
 }
-function drawPac(){ if(!pac) return; const R=15;
+function pacDie(){ pac.alive=false; pac.respawn=PAC_RESPAWN; pac.power=0; pac.moving=false;
+  shake=Math.max(shake,10); sfx('nope');
+  for(let i=0;i<22;i++){ const a=rand(0,6.283),sp=rand(40,190); parts.push({x:pac.x,y:pac.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:.6,max:.6,c:i%2?'#ffe23a':'#ff5a6a',sz:rand(2,5),g:30}); }
+  texts.push({x:pac.x,y:pac.y-26,txt:'💀 PAC DOWN',color:col('red'),life:2.0,vy:-16,sz:16}); }
+function drawPac(){ if(!pac) return;
+  if(!pac.alive){   // respawning — a faint ghost of Pac + a countdown at the center
+    const cx=worldCols*TILE/2, cy=worldRows*TILE/2;
+    ctx.save(); ctx.globalAlpha=.22+.14*Math.abs(Math.sin(now()*4)); ctx.fillStyle='#ffe23a';
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,15,0.32,6.283-0.32); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha=1; ctx.fillStyle='#ffe23a'; ctx.font='bold 13px monospace'; ctx.textAlign='center';
+    ctx.fillText('↻ '+Math.ceil(pac.respawn)+'s', cx, cy-24); ctx.restore(); return;
+  }
+  const powered=pac.power>0, R=15;
+  if(powered){   // POWER MODE — a flashing rainbow star-aura (invincible, eats normals)
+    const hue=(now()*260)%360; ctx.save(); ctx.globalAlpha=.45+.35*Math.abs(Math.sin(now()*11));
+    ctx.strokeStyle=`hsl(${hue},92%,62%)`; ctx.lineWidth=3; ctx.shadowBlur=20; ctx.shadowColor=`hsl(${hue},92%,62%)`;
+    ctx.beginPath(); ctx.arc(pac.x,pac.y,R+8,0,6.283); ctx.stroke(); ctx.restore();
+    if(pac.power<5 && Math.floor(pac.power*4)%2===0){ /* blink when about to end */ }
+  }
   const m = pac.moving ? (0.06+0.30*Math.abs(Math.sin(now()*16))) : 0.16;   // chomp when moving, ajar when idle
   ctx.save(); ctx.translate(pac.x,pac.y); ctx.rotate(pac.dir);
-  ctx.fillStyle='#ffe23a'; ctx.shadowBlur=16; ctx.shadowColor='#ffcf3a';
+  ctx.fillStyle = powered ? `hsl(${(now()*260)%360},95%,63%)` : '#ffe23a'; ctx.shadowBlur=16; ctx.shadowColor=powered?'#fff':'#ffcf3a';
   ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,R, m*Math.PI, (2-m)*Math.PI); ctx.closePath(); ctx.fill();
   ctx.shadowBlur=0; ctx.fillStyle='#1a1206'; ctx.beginPath(); ctx.arc(R*0.15,-R*0.5,2.4,0,6.283); ctx.fill();   // eye
   ctx.restore();
+  if(powered){ ctx.fillStyle='#fff'; ctx.font='bold 11px monospace'; ctx.textAlign='center'; ctx.fillText('★'+Math.ceil(pac.power)+'s', pac.x, pac.y-R-8); }
 }
 // ---- Pac-Man loot — glowing pickups that drift onto the board during combat; Pac-Man drives over them ----
 const PICKUP_CAP=6, PICKUP_LIFE=15;
 const BUFF_KEYS=['dmg','atkSpeed','crit','critDmg','range','coin'];
 const BUFF_LBL={dmg:'DMG',atkSpeed:'SPD',crit:'CRIT',critDmg:'CDMG',range:'RNG',coin:'COIN'};
-function pickupColor(p){ if(p.kind==='coin')return col('gold'); if(p.kind==='boss')return col('red');
+function pickupColor(p){ if(p.kind==='coin')return col('gold'); if(p.kind==='boss')return col('red'); if(p.kind==='power')return '#ffffff';
   return {dmg:col('orange'),atkSpeed:col('cyan'),crit:col('mag'),critDmg:col('purple'),range:col('lime'),coin:col('gold')}[p.bk]||col('cyan'); }
 function spawnPickup(){
-  let r=Math.random()*100, kind = r<45?'coin' : r<85?'buff' : 'boss';   // 45% coin · 40% buff · 15% OH-SHIT boss
+  let r=Math.random()*100, kind = r<40?'coin' : r<70?'buff' : r<84?'power' : 'boss';   // 40 coin · 30 buff · 14 POWER · 16 boss
   let x,y,tries=0; do{ x=rand(TILE, worldCols*TILE-TILE); y=rand(TILE, worldRows*TILE-TILE); tries++; }
     while(pac && dist(x,y,pac.x,pac.y)<150 && tries<24);
   const p={kind,x,y,life:PICKUP_LIFE};
@@ -628,6 +656,9 @@ function collectPickup(p){
   if(p.kind==='coin'){ coins+=p.amt; texts.push({x:p.x,y:p.y-10,txt:'🪙 +'+p.amt,color:col('gold'),life:1.4,vy:-30,sz:16}); sfx('coin'); syncHUD(); }
   else if(p.kind==='buff'){ gb[p.bk]=(gb[p.bk]||0)+0.01; renderBuffs();
     texts.push({x:p.x,y:p.y-10,txt:'✦ +1% '+BUFF_LBL[p.bk],color:col('cyan'),life:1.8,vy:-26,sz:16}); sfx('up'); }
+  else if(p.kind==='power'){ if(pac){ pac.power=Math.max(pac.power||0,0)+PAC_POWER; }
+    shake=Math.max(shake,8); sfx('up');
+    texts.push({x:p.x,y:p.y-10,txt:'★ POWER MODE — EAT THE GHOSTS!',color:col('gold'),life:2.6,vy:-22,sz:20}); }
   else if(p.kind==='boss'){ const lane=Math.floor(rand(0,lanes.length));
     spawnEnemy({type:'boss', lane, hpMul:Math.pow(1.19,Math.max(0,wave-1))*(1+wave*0.05), noBuff:true});
     shake=Math.max(shake,22); sfx('phantom');
@@ -638,7 +669,7 @@ function collectPickup(p){
 function updatePickups(dt){
   if(state==='playing'){ pickupT-=dt; if(pickupT<=0){ if(pickups.length<PICKUP_CAP) spawnPickup(); pickupT=rand(3.5,6.5); } }
   for(const p of pickups){ p.life-=dt;
-    if(pac && dist(pac.x,pac.y,p.x,p.y) < 27){ collectPickup(p); p.dead=true; } }
+    if(pac && pac.alive && dist(pac.x,pac.y,p.x,p.y) < 27){ collectPickup(p); p.dead=true; } }
   pickups=pickups.filter(p=>!p.dead && p.life>0);
 }
 function drawPickups(){ const T=now();
@@ -647,8 +678,27 @@ function drawPickups(){ const T=now();
     ctx.save(); ctx.shadowBlur=16; ctx.shadowColor=c;
     ctx.globalAlpha=fade*0.85*pulse; ctx.fillStyle=c; ctx.beginPath(); ctx.arc(p.x,p.y,R,0,6.283); ctx.fill();
     ctx.globalAlpha=fade; ctx.shadowBlur=0; ctx.font='900 13px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillStyle='#0c0a18'; ctx.fillText(p.kind==='coin'?'$':p.kind==='boss'?'☠':'✦', p.x, p.y+1);
+    ctx.fillStyle= p.kind==='power'?'#a5303a':'#0c0a18';
+    ctx.fillText(p.kind==='coin'?'$':p.kind==='boss'?'☠':p.kind==='power'?'★':'✦', p.x, p.y+1);
     ctx.restore(); ctx.globalAlpha=1; }
+}
+// ☄ Meteor Storm visuals
+function meteorImpact(m){ const R=100, dmg=150+wave*16;
+  explosion(m.mx,m.my,R,'#ff9a3a'); shake=Math.max(shake,7); sfx('boom');
+  for(let i=0;i<18;i++){ const a=rand(0,6.283),sp=rand(60,270); parts.push({x:m.mx,y:m.my,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:.55,max:.55,c:i%2?'#ff9a3a':'#ffd23a',sz:rand(2,5),g:40}); }
+  for(const en of enemies){ if(en.hp>0){ const d=dist(m.mx,m.my,en.x,en.y); if(d<=R) damage(en, dmg*(1-0.3*d/R), false, null); } } }
+function drawMeteors(){ if(!meteors.length)return; const ux=0.42, uy=1, L=Math.hypot(ux,uy), dx=ux/L, dy=uy/L, len=460, tl=95;
+  for(const m of meteors){ const p=clamp(m.prog,0,1);
+    // ground target ring (shows where it lands, grows as it nears)
+    ctx.save(); ctx.globalAlpha=0.55*Math.max(0,1-Math.abs(1-p*1.05)); ctx.strokeStyle='#ff9a3a'; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.arc(m.mx,m.my, 18+64*p,0,6.283); ctx.stroke(); ctx.restore();
+    if(m.hit) continue;
+    const hx=m.mx-dx*len*(1-p), hy=m.my-dy*len*(1-p);   // meteor head, falling toward impact
+    ctx.save(); ctx.lineCap='round'; ctx.shadowBlur=18; ctx.shadowColor='#ff7a2a';
+    const g2=ctx.createLinearGradient(hx,hy,hx-dx*tl,hy-dy*tl); g2.addColorStop(0,'#fff'); g2.addColorStop(.35,'#ffd23a'); g2.addColorStop(1,'rgba(255,120,40,0)');
+    ctx.strokeStyle=g2; ctx.lineWidth=6; ctx.beginPath(); ctx.moveTo(hx,hy); ctx.lineTo(hx-dx*tl,hy-dy*tl); ctx.stroke();
+    ctx.fillStyle='#fff'; ctx.shadowBlur=22; ctx.shadowColor='#ffcf3a'; ctx.beginPath(); ctx.arc(hx,hy,6.5,0,6.283); ctx.fill();
+    ctx.restore(); }
 }
 function updateCam(dt){ const tgt=fitScale(); viewScale+=(tgt-viewScale)*Math.min(1,dt*0.9);   // slow, cinematic zoom-out as the map grows
   camOffx=(W-worldCols*TILE*viewScale)/2; camOffy=(H-worldRows*TILE*viewScale)/2; }
@@ -755,7 +805,8 @@ let blankPlace=false;     // (retired) — kept declared so older helpers don't 
 let moveTower=null;       // the tower currently in free-move mode (F) — next empty-tile click relocates it once
 let pac=null;             // WASD-driven Pac-Man (experimental action layer)
 const pacKeys={w:0,a:0,s:0,d:0};   // held-key state for smooth movement
-let pickups=[], pickupT=0;   // glowing loot Pac-Man collects (mini-buffs / coins / OH-SHIT boss)
+let pickups=[], pickupT=0;   // glowing loot Pac-Man collects (mini-buffs / coins / power-star / OH-SHIT boss)
+let meteors=[];              // falling Meteor Storm visuals (streak down → impact)
 let radial=null;          // open radial picker: {c,r,x,y,rad,bubbles:[{type,x,y}]}
 let lastPlacedType=null;  // last tower type actually placed
 let focusHeld=false;      // hold E → focus-fire the monster under the cursor
@@ -782,9 +833,9 @@ let revealUnlocked=false, revealUntil=0, revealMark=0;     // Reveal Path: unloc
 const REVEAL_DUR=10, REVEAL_KILLS=25; // shows the ghost routes for 10s; recharge = 25 kills
 // Three boss-reward abilities unlocked at bosses 15 / 20 / 25:
 let nukeUnlocked=false, nukeMark=0;                        // ☢ NUKE (boss 15) — instant board-wide blast
-const NUKE_KILLS=90;
+const NUKE_KILLS=150;   // raised — Nuke was too strong to fire so often
 let stasisUnlocked=false, stasisUntil=0, stasisMark=0;     // ⏳ STASIS (boss 20) — freeze every enemy
-const STASIS_DUR=4, STASIS_KILLS=40;
+const STASIS_DUR=4, STASIS_KILLS=85;   // raised — the board-wide Freeze was too cheap
 let meteorUnlocked=false, meteorUntil=0, meteorMark=0, meteorT=0;   // ☄ METEOR STORM (boss 25) — raining AoE
 const METEOR_DUR=8, METEOR_KILLS=50;
 // Duke-Nukem-style difficulty: ghost HP mult + starting coins + a trash-talking intro guy per tier
@@ -806,8 +857,8 @@ function reset(){
   { const tg=document.getElementById('towerGuideOverlay'); if(tg)tg.classList.remove('on'); }
   spawnQueue=[]; spawnT=0; shake=0; hoverCell=null; waveActive=false; countdown=GAP_BOSS; introT=0; statsTimer=0; armed=false;
   lanes=[]; addLane(); relayout(); viewScale=fitScale(); updateCam(1);
-  pac={x:worldCols*TILE/2, y:worldRows*TILE/2, dir:0, speed:230, moving:false, eats:0};   // drop Pac-Man in the middle
-  pacKeys.w=pacKeys.a=pacKeys.s=pacKeys.d=0; pickups=[]; pickupT=4;
+  pac={x:worldCols*TILE/2, y:worldRows*TILE/2, dir:0, speed:230, moving:false, eats:0, alive:true, power:0, respawn:0};   // drop Pac-Man in the middle
+  pacKeys.w=pacKeys.a=pacKeys.s=pacKeys.d=0; pickups=[]; pickupT=4; meteors=[];
   hasteUntil=0; hasteMark=-HASTE_KILLS;   // Overdrive is ALWAYS available (charged at start), then costs kills
   phantomUnlocked=false; phantomUntil=0; phantomMark=0;
   revealUnlocked=false; revealUntil=0; revealMark=0;
@@ -1277,13 +1328,16 @@ function update(dt){
   // planted dynamite — count down the fuse, then blow
   for(const bm of bombs){ bm.fuse-=g; if(bm.fuse<=0){ bombExplode(bm); bm.dead=true; } }
   bombs=bombs.filter(b=>!b.dead);
-  // ☄ Meteor Storm — while active, rain AoE strikes onto random live enemies
+  // ☄ Meteor Storm — spawn VISIBLE meteors that streak down from the sky and detonate on impact
   if(now()<meteorUntil){ meteorT-=g;
-    if(meteorT<=0){ meteorT=0.18; const live=enemies.filter(e=>e.hp>0);
-      const mx = live.length ? live[Math.floor(rand(0,live.length))].x+rand(-45,45) : rand(0,worldCols*TILE);
-      const my = live.length ? live[Math.floor(rand(0,live.length))].y+rand(-45,45) : rand(0,worldRows*TILE);
-      const R=95, dmg=150+wave*16; explosion(mx,my,R*0.95,'#ff9a3a'); sfx('boom');
-      for(const en of enemies){ if(en.hp>0){ const d=dist(mx,my,en.x,en.y); if(d<=R) damage(en, dmg*(1-0.3*d/R), false, null); } } } }
+    if(meteorT<=0){ meteorT=0.22; const live=enemies.filter(e=>e.hp>0);
+      const tgt = live.length ? live[Math.floor(rand(0,live.length))] : null;
+      const mx = tgt ? tgt.x+rand(-40,40) : rand(60,worldCols*TILE-60);
+      const my = tgt ? tgt.y+rand(-40,40) : rand(60,worldRows*TILE-60);
+      meteors.push({mx,my,prog:0,dur:0.42,hit:false}); sfx('boom'); } }
+  // advance all in-flight meteors (they finish falling even after the storm ends)
+  for(const m of meteors){ m.prog += dt/m.dur; if(m.prog>=1 && !m.hit){ m.hit=true; meteorImpact(m); } }
+  meteors=meteors.filter(m=>m.prog<1.5);
   // wave complete?
   // Boss solo phase: once its escorts are dead, ramp the speed one step every 5s up to the max
   const bossSolo = waveActive && (wave%5===0) && spawnQueue.length===0 && enemies.length>0 && enemies.every(e=>e.boss);
@@ -1378,6 +1432,7 @@ function render(){
   for(const t of towers) if(t.orbs&&t.orbs.length) drawLaserOrbs(t);   // Orbital Lances over the ghosts
   drawPickups();   // glowing Pac-Man loot
   drawPac();       // Pac-Man on top of everything
+  drawMeteors();   // ☄ meteors streak down over the field
   // focus-fire reticle (hold E) — a spinning crosshair on the monster under the cursor
   if(focusHeld && focusEnemy && focusEnemy.hp>0){ const e=focusEnemy, R=e.r+10, T=now();
     ctx.save(); ctx.translate(e.x,e.y); ctx.rotate(T*1.4); ctx.strokeStyle=col('red'); ctx.lineWidth=2.5; ctx.globalAlpha=.9; ctx.shadowBlur=10; ctx.shadowColor=col('red');
@@ -2295,7 +2350,13 @@ document.getElementById('guideOverlay').addEventListener('click',ev=>{ if(ev.tar
 
 // ---- Patch notes — the whole build history, newest on top (curated by hand as we build) ----
 const PATCH_NOTES=[
-  {v:'00.11', tag:'current', t:'Laser Orbital Lances · Pac-Man & loot · Psyche nerf · fire', items:[
+  {v:'00.12', tag:'current', t:'Pac-Man rework · ability nerfs · visible meteors', items:[
+    'Pac-Man plays for real now: ghosts KILL him on contact (he goes down, then respawns after 8s at center). No more free-eating everything.',
+    'Grab a ★ POWER-STAR pickup to enter a 30s gobble mode — flashing, invincible, and able to EAT normal mobs (bosses + special mobs are immune, like the arcade). Star mode blinks as it runs out.',
+    'Nuke and Freeze (Stasis) cost more kills to recharge (Nuke 90→150, Stasis 40→85) — they were too strong to spam.',
+    'Meteor Storm is finally VISIBLE: real meteors streak down from the sky with fiery trails and a ground target ring, then detonate on impact.',
+  ]},
+  {v:'00.11', t:'Laser Orbital Lances · Pac-Man & loot · Psyche nerf · fire', items:[
     'LASER signature ability — Orbital Lances: a ring of laser spheres orbits the tower (one per level, up to 12), each detonating in a blast on contact. 30s cooldown. Lv5 orbs are bigger, hit far harder, and set enemies ablaze.',
     'Demolition blasts now set every minion caught in them ON FIRE — a fast, heavy burn-over-time with flame VFX.',
     'Pac-Man (experimental): drive him with WASD, chomp enemies, and collect glowing loot — mini +1% global buffs, coin drops, and the occasional OH-SHIT pickup that spawns a surprise boss (run over two, get two).',
@@ -2389,7 +2450,7 @@ const KEYHINTS=[
   ['upAllBtn','Upgrade every same-type tower ≤ this level, up to this level +1','`'],
 ];
 const SHOP_HINT={
-  kbm:'<b style="color:var(--ink)">Click a tower</b> then a tile to place it, or hover a tile + <b style="color:var(--cyan)">1-5</b> to hotkey a favorite. <b style="color:var(--cyan)">E</b> over a monster to <b style="color:var(--red)">lock-fire</b> it. <b style="color:var(--cyan)">Q</b> upgrade · <b style="color:var(--cyan)">`</b> upgrade all · <b style="color:var(--lime)">G</b> free-move · <b style="color:var(--red)">F</b> sell · <b style="color:var(--gold)">WASD</b> drive Pac-Man. Left-click build wheel is off in this mode — see the <b style="color:var(--purple)">🗼 Tower Guide</b> (H).',
+  kbm:'<b style="color:var(--ink)">Click a tower</b> then a tile to place it, or hover a tile + <b style="color:var(--cyan)">1-5</b> to hotkey a favorite. <b style="color:var(--cyan)">E</b> over a monster to <b style="color:var(--red)">lock-fire</b> it. <b style="color:var(--cyan)">Q</b> upgrade · <b style="color:var(--cyan)">`</b> upgrade all · <b style="color:var(--lime)">G</b> free-move · <b style="color:var(--red)">F</b> sell · <b style="color:var(--gold)">WASD</b> drive Pac-Man (ghosts kill him — grab a ★ to gobble). Left-click build wheel is off in this mode — see the <b style="color:var(--purple)">🗼 Tower Guide</b> (H).',
   tablet:'<b style="color:var(--ink)">Tap a tower</b> then a tile to place it, or <b style="color:var(--ink)">tap an empty tile</b> for the build wheel. Tap a placed tower to select it, then use its <b style="color:var(--purple)">Upgrade · Move · Sell</b> buttons. See the <b style="color:var(--purple)">🗼 Tower Guide</b>.',
 };
 function applyInputMode(mode){ inputMode=mode; try{ localStorage.setItem('neonInputMode',mode); }catch(_){}
