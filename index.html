@@ -388,7 +388,7 @@
         <button class="tbtn" data-m="weak">Weak</button>
       </div>
       <button class="haste" id="hasteBtn" data-key="Z" title="+60% attack speed · recharges by kills · [Z]">⚡ OVERDRIVE</button>
-      <button class="phantom" id="phantomBtn" data-key="X" title="All towers hunt only Phantoms for 10s · unlocks at boss 10 · [X]" style="display:none">👻 PHANTOM</button>
+      <button class="phantom" id="phantomBtn" data-key="X" title="SNIPE — every tower fires one shot at the toughest enemy (or your focus target) from any range · unlocks at boss 10 · [X]" style="display:none">🎯 SNIPE</button>
       <button class="reveal" id="revealBtn" data-key="C" title="Reveal the ghost routes for 10s · unlocks at boss 5 · [C]" style="display:none">🗺 REVEAL</button>
       <button class="nuke" id="nukeBtn" data-key="V" title="Vaporize every normal mob (specials + bosses survive) · unlocks at boss 15 · [V]" style="display:none">☢ NUKE</button>
       <button class="stasis" id="stasisBtn" data-key="B" title="Freeze EVERY enemy for 4s · unlocks at boss 20 · [B]" style="display:none">⏳ STASIS</button>
@@ -397,7 +397,7 @@
   </div>
   <div class="panel">
     <h1>SHOEMOCKER</h1>
-    <div class="verline" id="verLine" title="Version · build commit">v00.19 · <span id="buildSha">588c20d</span></div>
+    <div class="verline" id="verLine" title="Version · build commit">v00.20 · <span id="buildSha">6e23a29</span></div>
     <button class="btn go" id="waveBtn">▶ START WAVE 1</button>
     <div class="card">
       <h2>Global Buffs — from bosses</h2>
@@ -835,6 +835,7 @@ const pacKeys={w:0,a:0,s:0,d:0};   // held-key state for smooth movement
 let pickups=[], pickupT=0;   // glowing loot Pac-Man collects (mini-buffs / coins / power-star / OH-SHIT boss)
 let meteors=[];              // falling Meteor Storm visuals (streak down → impact)
 let bursts=[];               // expanding shockwave rings (laser-orb detonations, etc.)
+let snipeFx=null;            // Snipe reticle burst on the sniped target
 let radial=null;          // open radial picker: {c,r,x,y,rad,bubbles:[{type,x,y}]}
 let lastPlacedType=null;  // last tower type actually placed
 let focusHeld=false;      // hold E → focus-fire the monster under the cursor
@@ -896,7 +897,7 @@ function reset(){
   spawnQueue=[]; spawnT=0; shake=0; hoverCell=null; waveActive=false; countdown=GAP_BOSS; introT=0; statsTimer=0; armed=false;
   lanes=[]; addLane(); relayout(); viewScale=fitScale(); updateCam(1);
   pac={x:worldCols*TILE/2, y:worldRows*TILE/2, dir:0, speed:230, moving:false, eats:0, alive:true, power:0, respawn:0};   // drop Pac-Man in the middle
-  pacKeys.w=pacKeys.a=pacKeys.s=pacKeys.d=0; pickups=[]; pickupT=4; meteors=[]; bursts=[];
+  pacKeys.w=pacKeys.a=pacKeys.s=pacKeys.d=0; pickups=[]; pickupT=4; meteors=[]; bursts=[]; snipeFx=null;
   hasteUntil=0; hasteMark=-HASTE_KILLS;   // Overdrive is ALWAYS available (charged at start), then costs kills
   phantomUnlocked=false; phantomUntil=0; phantomMark=0;
   revealUnlocked=false; revealUntil=0; revealMark=0;
@@ -1169,6 +1170,14 @@ function updateBursts(dt){ for(const b of bursts) b.t+=dt; bursts=bursts.filter(
 function drawBursts(){ for(const b of bursts){ const p=b.t/b.dur, r=b.r0+(b.r1-b.r0)*p;
   ctx.save(); ctx.globalAlpha=(1-p)*0.9; ctx.strokeStyle=b.color; ctx.lineWidth=b.w*(1-p*0.5); ctx.shadowBlur=14; ctx.shadowColor=b.color;
   ctx.beginPath(); ctx.arc(b.x,b.y,r,0,6.283); ctx.stroke(); ctx.restore(); ctx.globalAlpha=1; } }
+// Snipe reticle — a converging crosshair + expanding shock ring on the sniped target
+function drawSnipeFx(){ if(!snipeFx)return; const p=clamp(snipeFx.t/snipeFx.dur,0,1), x=snipeFx.x, y=snipeFx.y, r=col('red');
+  ctx.save(); ctx.translate(x,y); ctx.strokeStyle=r; ctx.shadowBlur=12; ctx.shadowColor=r;
+  const R=26-16*Math.min(1,p*2.2);   // crosshair snaps inward, then the ring blows out
+  ctx.globalAlpha=1-p*0.6; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(0,0,Math.max(8,R),0,6.283); ctx.stroke();
+  for(let k=0;k<4;k++){ const a=k*Math.PI/2; const rr2=Math.max(8,R); ctx.beginPath(); ctx.moveTo(Math.cos(a)*(rr2+3),Math.sin(a)*(rr2+3)); ctx.lineTo(Math.cos(a)*(rr2+13),Math.sin(a)*(rr2+13)); ctx.stroke(); }
+  ctx.globalAlpha=(1-p)*0.7; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(0,0,18+p*70,0,6.283); ctx.stroke();
+  ctx.restore(); ctx.globalAlpha=1; ctx.shadowBlur=0; }
 function updateLaserOrbs(t,g){ if(!t.orbs||!t.orbs.length)return;
   const L5=t.level>=5, s=stats(t), orbR=46+t.level*3, spin=L5?2.8:2.0;
   t.orbSpin=(t.orbSpin||0)+g*spin;
@@ -1290,7 +1299,7 @@ function unlockPhantomHunt(){
   const pb=document.getElementById('phantomBtn'); pb.style.display='';
   if(pb.animate) pb.animate([{opacity:0,transform:'scale(.4) translateY(6px)',filter:'blur(3px)'},
     {opacity:1,transform:'scale(1.15)',offset:.6,filter:'blur(0)'},{transform:'scale(1)'}],{duration:640,easing:'ease-out'});
-  texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.14,txt:'👻 PHANTOM HUNT UNLOCKED',color:'#e6e9ff',life:2.4,vy:-14,sz:24});
+  texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.14,txt:'🎯 SNIPE UNLOCKED',color:col('red'),life:2.4,vy:-14,sz:24});
   updatePhantomBtn();
 }
 
@@ -1331,6 +1340,7 @@ function update(dt){
   updatePac(dt);       // Pac-Man moves in real time regardless of the state gates below
   updatePickups(dt);   // loot spawns during combat, expires, and is collected on contact
   updateBursts(dt);    // expanding shockwave rings (laser-orb detonations)
+  if(snipeFx){ snipeFx.t+=dt; if(snipeFx.t>=snipeFx.dur) snipeFx=null; }
   updateTowerHeal(dt); // Pac-Man tower repairs tick in real time
   if(state==='ready'||state==='bosspick'||state==='over'){ updateFX(dt); return; }
   if(state==='idle'){
@@ -1491,6 +1501,7 @@ function render(){
   for(const e of enemies)drawEnemy(e);
   for(const t of towers) if(t.orbs&&t.orbs.length) drawLaserOrbs(t);   // Orbital Lances over the ghosts
   drawBursts();    // laser-orb shockwave rings
+  drawSnipeFx();   // Snipe reticle
   drawPickups();   // glowing Pac-Man loot
   drawPac();       // Pac-Man on top of everything
   drawMeteors();   // ☄ meteors streak down over the field
@@ -2237,13 +2248,22 @@ function fireHaste(){ const t=now(); if(t>=hasteUntil && kills-hasteMark>=HASTE_
 hasteBtn.onclick=fireHaste;
 // ---- Phantom Hunt button ----
 const phantomBtn=document.getElementById('phantomBtn');
-function updatePhantomBtn(){ if(!phantomUnlocked)return; const t=now(), ch=Math.min(PHUNT_KILLS,kills-phantomMark);
-  if(t<phantomUntil){ phantomBtn.className='phantom active'; phantomBtn.disabled=true; phantomBtn.textContent='👻 HUNTING '+Math.ceil(phantomUntil-t)+'s'; }
-  else if(ch>=PHUNT_KILLS){ phantomBtn.className='phantom'; phantomBtn.disabled=false; phantomBtn.textContent='👻 PHANTOM HUNT'; }
-  else { phantomBtn.className='phantom cool'; phantomBtn.disabled=true; phantomBtn.textContent='👻 '+ch+'/'+PHUNT_KILLS+' kills'; } }
-function firePhantom(){ if(!phantomUnlocked)return; const t=now(); if(t>=phantomUntil && kills-phantomMark>=PHUNT_KILLS){ audioInit();
-  phantomUntil=t+PHUNT_DUR; phantomMark=kills; sfx('phantom');
-  texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.14,txt:'👻 PHANTOM HUNT!',color:'#e6e9ff',life:1.6,vy:-16,sz:28}); updatePhantomBtn(); } }
+function updatePhantomBtn(){ if(!phantomUnlocked)return; const ch=Math.min(PHUNT_KILLS,kills-phantomMark);
+  if(ch>=PHUNT_KILLS){ phantomBtn.className='phantom'; phantomBtn.disabled=false; phantomBtn.textContent='🎯 SNIPE'; }
+  else { phantomBtn.className='phantom cool'; phantomBtn.disabled=true; phantomBtn.textContent='🎯 '+ch+'/'+PHUNT_KILLS+' kills'; } }
+// SNIPE — one coordinated volley: every tower fires a single shot at the toughest enemy (or your focus target),
+// from ANY range. Instant, then recharges by kills. (Repurposed from the old Phantom Hunt.)
+function firePhantom(){ if(!phantomUnlocked)return; if(kills-phantomMark<PHUNT_KILLS) return;
+  const live=enemies.filter(e=>e.hp>0); if(!live.length){ sfx('nope'); return; }
+  audioInit(); phantomMark=kills; sfx('zap'); shake=Math.max(shake,6);
+  const tgt=(focusHeld&&focusEnemy&&focusEnemy.hp>0)?focusEnemy:live.reduce((a,b)=>b.hp>a.hp?b:a);
+  snipeFx={x:tgt.x,y:tgt.y,t:0,dur:0.7};
+  for(const t of towers){ if(tgt.hp<=0)break; const s=stats(t); let dmg, crit=false;
+    if(t.type==='bomb'){ dmg=(s.bombDmg||0)*0.6; }
+    else if(t.type==='psyche'){ dmg=0; }
+    else { const rd=rollDmg(s); dmg=rd.v; crit=rd.crit; }
+    if(dmg>0){ beams.push({x1:t.x,y1:t.y,x2:tgt.x,y2:tgt.y,life:.24,color:TOWER_TYPES[t.type].color}); damage(tgt,dmg,crit,t); } }
+  texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.14,txt:'🎯 SNIPE!',color:col('red'),life:1.6,vy:-16,sz:28}); updatePhantomBtn(); }
 phantomBtn.onclick=firePhantom;
 // ---- Reveal Path button ----
 const revealBtn=document.getElementById('revealBtn');
@@ -2462,7 +2482,11 @@ document.getElementById('guideOverlay').addEventListener('click',ev=>{ if(ev.tar
 
 // ---- Patch notes — the whole build history, newest on top (curated by hand as we build) ----
 const PATCH_NOTES=[
-  {v:'00.19', tag:'current', t:'REAL BOSSES — the heralds now walk the path', items:[
+  {v:'00.20', tag:'current', t:'Phantom Hunt → SNIPE', items:[
+    'Phantom Hunt is now SNIPE (still on X). Instead of a 10s phantoms-only mode, it\'s a single coordinated volley: EVERY tower fires one shot at the toughest enemy on the board (or your E-locked focus target) from ANY range. Great for bursting a boss.',
+    'New crosshair-reticle graphics on the target + tracer beams from every tower. Recharges by kills, unlocks at boss 10.',
+  ]},
+  {v:'00.19', t:'REAL BOSSES — the heralds now walk the path', items:[
     'The boss pictures that herald every 5th wave are now ACTUAL bosses that walk the path! Wave 5 = The Baby, 10 = The Kool-Aid King, 15 = The Brute, 20 = The Demon, and 25 = a brand-new final boss, THE END (a hooded reaper).',
     'Each boss is bigger, named on its health bar, and scales harder than the last. After wave 25 the roster cycles (endless) — distinct endless chaos comes later.',
   ]},
@@ -2580,7 +2604,7 @@ const KEYHINTS=[
   ['guideBtn','Monster Guide','M'],
   ['patchBtn','Patch notes — the whole build history',null],
   ['hasteBtn','+60% attack speed · recharges by kills','Z'],
-  ['phantomBtn','All towers hunt only Phantoms for 10s · unlocks at boss 10','X'],
+  ['phantomBtn','SNIPE — every tower fires one shot at the toughest enemy from any range · unlocks at boss 10','X'],
   ['revealBtn','Reveal the ghost routes for 10s · unlocks at boss 5','C'],
   ['nukeBtn','Vaporize every normal mob (specials + bosses survive) · unlocks at boss 15','V'],
   ['stasisBtn','Freeze EVERY enemy for 4s · unlocks at boss 20','B'],
