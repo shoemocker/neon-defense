@@ -397,7 +397,7 @@
   </div>
   <div class="panel">
     <h1>SHOEMOCKER</h1>
-    <div class="verline" id="verLine" title="Version · build commit">v00.17 · <span id="buildSha">8253fea</span></div>
+    <div class="verline" id="verLine" title="Version · build commit">v00.18 · <span id="buildSha">1f78cac</span></div>
     <button class="btn go" id="waveBtn">▶ START WAVE 1</button>
     <div class="card">
       <h2>Global Buffs — from bosses</h2>
@@ -598,7 +598,7 @@ let viewScale=1, camOffx=0, camOffy=0;
 const PAD=1;   // always keep a 1-tile border ring of blocks around the arena (so edge towers' arrows aren't clipped)
 function fitScale(){ return Math.min(W/((worldCols+2*PAD)*TILE), H/((worldRows+2*PAD)*TILE)); }
 // ---- Pac-Man (experimental) — WASD-driven, real-time (independent of game speed); chomps enemies he touches ----
-const PAC_RESPAWN=8, PAC_POWER=15;
+const PAC_RESPAWN=8, PAC_POWER=7.5;
 const isSpecial=e=>e.boss||e.exploder||e.froster||e.jolt||e.hex;   // bosses + special mobs — never edible
 function updatePac(dt){
   if(!pac || state==='over'||state==='bosspick'||state==='ready') return;
@@ -1391,7 +1391,8 @@ function update(dt){
     if(bossRampT<=0 && speedIdx<SPEEDS.length-1){ setSpeed(speedIdx+1); bossRampT=5;
       texts.push({x:worldCols*TILE/2,y:worldRows*TILE*0.2,txt:'▶▶ '+Math.round(SPEEDS[speedIdx]/1.4*100)+'% SPEED',color:col('cyan'),life:1.4,vy:-14,sz:22}); } }
   else bossRampT=5;
-  if(waveActive && spawnQueue.length===0 && enemies.length===0){
+  if(waveActive && spawnQueue.length===0 && enemies.every(e=>e.surprise)){   // Pac's surprise bosses don't block wave-clear — they linger
+
     waveActive=false; const wasBoss=(wave%5===0);
     setSpeed(userSpeedIdx);   // restore the player's chosen speed after the wave
     coins+=10+wave*2; texts.push({x:worldCols*TILE/2,y:worldRows*TILE/2,txt:'WAVE CLEAR +'+(10+wave*2),color:col('cyan'),life:1.6,vy:-16,sz:26});
@@ -2419,7 +2420,11 @@ document.getElementById('guideOverlay').addEventListener('click',ev=>{ if(ev.tar
 
 // ---- Patch notes — the whole build history, newest on top (curated by hand as we build) ----
 const PATCH_NOTES=[
-  {v:'00.17', tag:'current', t:'Guide/Tower/Patch panels switch cleanly', items:[
+  {v:'00.18', tag:'current', t:'Surprise bosses don\'t stall the round · shorter star', items:[
+    'Pac\'s surprise bosses (from the OH-SHIT pickup) no longer block wave-clear — the round advances as normal and the boss just lingers into the next wave.',
+    'Pac-Man\'s star / gobble mode is now 7.5s (halved from 15).',
+  ]},
+  {v:'00.17', t:'Guide/Tower/Patch panels switch cleanly', items:[
     'The Monster Guide, Tower Guide and Patch panels are now mutually exclusive — clicking one closes the others, so you can flip tab-to-tab instead of them stacking or hiding behind each other.',
   ]},
   {v:'00.16', t:'Pac-Man repairs towers · way more specials', items:[
